@@ -1,4 +1,5 @@
 import pandas as pd
+from sklearn import tree
 
 
 class PredManClass:
@@ -9,8 +10,6 @@ class PredManClass:
         v = self.vib_foot['classe'].value_counts()
         print('N° sample x classe:')
         print(v)
-
-
 
 
 if __name__ == "__main__":
