@@ -1,0 +1,1 @@
+# Manutenzione-predittiva-BIESSE
