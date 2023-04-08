@@ -1,12 +1,17 @@
 import numpy as np
 import pandas as pd
 import openpyxl
+import seaborn as sns
 import matplotlib.pyplot as plt
 from sklearn import tree
 from sklearn.model_selection import train_test_split
 from sklearn import metrics
 from sklearn.utils import resample
+from sklearn.model_selection import KFold
 from scipy.stats import weibull_min
+from lifelines import WeibullFitter, WeibullAFTFitter, KaplanMeierFitter
+from lifelines.utils import k_fold_cross_validation, median_survival_times
+
 import datetime as dt
 
 
@@ -22,9 +27,31 @@ class PredManClass:
         print(self.vib_foot.shape)
 
     def some_stats(self):
+        df = self.vib_foot
         v = self.vib_foot['classe'].value_counts()
         print('N° sample x classe:')
         print(v)
+
+        col = 'oreLavorazione'
+        # Istogramma
+        sns.histplot(data=df, x=col, bins=50, kde=True, alpha=0.5)
+        plt.xlabel('Valori')
+        plt.ylabel('Frequenza')
+        plt.title('Istogramma dei dati')
+        plt.show()
+
+        # Some visualization...
+        kmf = KaplanMeierFitter()
+        kmf.fit(durations=df['oreLavorazione'])
+        kmf.plot_survival_function()
+        plt.show()
+        kmf.plot_cumulative_density()
+        plt.show()
+
+        median_ = kmf.median_survival_time_
+        median_confidence_interval_ = median_survival_times(kmf.confidence_interval_)
+        print(median_)
+        print(median_confidence_interval_)
 
     def decisionTree_classifier(self):
         # rimuoviamo temporaneamente il campione della classe con un solo campione
@@ -42,7 +69,6 @@ class PredManClass:
         df_2 = resample(self.vib_foot[self.vib_foot['classe'] == 3], replace=True, n_samples=19, random_state=42)
         df_1 = resample(self.vib_foot[self.vib_foot['classe'] == 4], replace=True, n_samples=19, random_state=42)
         df_3 = self.vib_foot[self.vib_foot['classe'] == 5].sample(19)
-
 
         # Combinare i dataframes oversampled con il dataframe originale
         df_balanced = pd.concat([df_3, df_2, df_1])
@@ -70,7 +96,6 @@ class PredManClass:
         '''metrics.ConfusionMatrixDisplay(metrics.confusion_matrix(y_test, prediction)).plot()
         plt.show()'''
 
-
         # Plotting the feature importance for Top 10 most important columns
         feature_importances = pd.Series(dTree.feature_importances_, index=X_train.columns)
         feature_importances.nlargest(10).plot(kind='barh', fontsize=6)
@@ -79,22 +104,39 @@ class PredManClass:
     def weibullDist(self):
         df = self.vib_foot
 
-        # Calcola i parametri della distribuzione di Weibull
-        shape, loc, scale = weibull_min.fit(df['deltaDateHour'], floc=0)
+        # FIRST IMPLEMENTATION
+        aft = WeibullAFTFitter()
+        aft.fit(df[['deltaDateHour', 'percentualiLavorazione', 'oreLavorazione']],
+                duration_col='oreLavorazione', formula='percentualiLavorazione + deltaDateHour')
+        scale = aft.params_['lambda_']['Intercept']
+        shape = np.exp(aft.params_['rho_']['Intercept'])
+        print(shape, scale)
 
-        # Stima il tempo di vita rimanente per ogni componente
-        df['remainingLifeTime'] = weibull_min.ppf(0.9, shape, loc=loc, scale=scale) - df['deltaDateHour']
+        # SECOND IMPLEMENTATION
+        wf = WeibullFitter()
+        wf.fit(df['oreLavorazione'])
+        scale = wf.lambda_
+        shape = wf.rho_
+        print(shape, scale)
 
-        # Converti il tempo di vita rimanente in giorni
-        df['remainingLifeTime'] = df['remainingLifeTime'] / 24
+        # THIRD IMPLEMENTATION
+        shape, _, scale = weibull_min.fit(df['oreLavorazione'], floc=0)
+        print(shape, scale)
 
-        # Stampa il risultato
-        print(df[['snMacchina', 'remainingLifeTime']])
 
+        # per confrontare l'andamento in funzione delle classi
+        '''ax = plt.subplot(111)
+        m = (df["classe"] == 5)
+        kmf.fit(durations=df['oreLavorazione'][m], label="Class 5")
+        kmf.plot_survival_function(ax=ax)
+        kmf.fit(df['oreLavorazione'][~m], label="Others class")
+        kmf.plot_survival_function(ax=ax, at_risk_counts=True)
+        plt.title("Survival of components")
+        plt.show()'''
 
         # Calcola la distribuzione di Weibull con i parametri shape, loc e scale
         x = np.linspace(0, 10000, 10000)
-        pdf = weibull_min.pdf(x, shape, loc=loc, scale=scale)
+        pdf = weibull_min.pdf(x, shape, scale=scale)
 
         # Grafica la distribuzione di Weibull
         plt.plot(x, pdf)
@@ -106,6 +148,9 @@ class PredManClass:
 
 if __name__ == "__main__":
     predManObj = PredManClass()
-    # predManObj.some_stats()
+
+    predManObj.some_stats()
+
     # predManObj.decisionTree_classifier()
+
     predManObj.weibullDist()
