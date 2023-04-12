@@ -180,9 +180,6 @@ class PredManClass:
         print(f"Probabilità di sopravvivenza: {prob_sopravvivenza:.2%}")
 
 
-
-
-
         '''
         # SECOND IMPLEMENTATION
         wf = WeibullFitter()
@@ -217,6 +214,35 @@ class PredManClass:
         plt.title('Distribuzione di Weibull')
         plt.show()'''
 
+    def vibration_footprint_matrix(self):
+        # Definisci i range di vibrazione e i secondi trascorsi in ogni range
+        vibration_ranges = ["0-1", "1-2", "2-3", "3-4", "4-5"]
+        vibration_seconds = [[100, 200, 150, 50, 20],  # Riga 0-1
+                             [50, 80, 120, 100, 70],  # Riga 1-2
+                             [30, 60, 100, 80, 40],  # Riga 2-3
+                             [10, 30, 50, 70, 100],  # Riga 3-4
+                             [5, 10, 20, 30, 50]]  # Riga 4-5
+
+        # Crea un vettore numpy delle somme dei secondi trascorsi in ogni range di vibrazione
+        vibration_sums = np.sum(vibration_seconds, axis=1)
+
+
+        # Crea il grafico colorato in funzione della somma di secondi per ogni range
+        plt.imshow(vibration_sums[:, np.newaxis].T, cmap='Reds')
+        # Aggiungi la legenda dell'intensità
+        plt.colorbar()
+        plt.title('Secondi trascorsi su ogni range')
+        plt.xticks(np.arange(len(vibration_ranges)), vibration_ranges)
+        plt.yticks([])
+
+        # Aggiungi i numeri all'interno dei quadranti del vettore
+        for i in range(len(vibration_ranges)):
+            text = plt.text(i, 0, vibration_sums[i], ha="center", va="center", color="black")
+
+
+        plt.show()
+
+
 
 if __name__ == "__main__":
     predManObj = PredManClass()
@@ -225,4 +251,6 @@ if __name__ == "__main__":
 
     # predManObj.decisionTree_classifier()
 
-    predManObj.weibullDist()
+    # predManObj.weibullDist()
+
+    predManObj.vibration_footprint_matrix()
