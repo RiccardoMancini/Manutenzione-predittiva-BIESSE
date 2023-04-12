@@ -7,9 +7,10 @@ from sklearn import tree
 from sklearn.model_selection import train_test_split
 from sklearn import metrics
 from sklearn.utils import resample
+from sklearn.preprocessing import StandardScaler
 from sklearn.model_selection import KFold
 from scipy.stats import weibull_min
-from lifelines import WeibullFitter, WeibullAFTFitter, KaplanMeierFitter
+from lifelines import WeibullFitter, WeibullAFTFitter, KaplanMeierFitter, ExponentialFitter, LogNormalFitter, LogLogisticFitter
 from lifelines.utils import k_fold_cross_validation, median_survival_times
 
 import datetime as dt
@@ -103,15 +104,86 @@ class PredManClass:
 
     def weibullDist(self):
         df = self.vib_foot
+        df["fail"] = df['classe'].apply(lambda x: 0 if x == 5 else 1)
+        df = df[['deltaDateHour', 'percentualiLavorazione', 'oreLavorazione', 'fail']]
+
+        print(df.dtypes)
+
+
+        # Standardizziamo le covariate
+        '''scaler = StandardScaler()
+        covariates_df_standardized = scaler.fit_transform(df[['deltaDateHour', 'deltaDateHour']])
+        covariates_df = pd.DataFrame(covariates_df_standardized, columns=['deltaDateHour', 'percentualiLavorazione'])
+        # Concateniamo i due DataFrame
+        df = pd.concat([covariates_df, time_df], axis=1)'''
+
+        print(df.head())
+
+        T = df["oreLavorazione"]
+        E = df['fail']
+        plt.hist(T, bins=50)
+        plt.show()
+
+        kmf = KaplanMeierFitter()
+        kmf.fit(durations=T, event_observed=E)
+        kmf.plot_survival_function()
+        plt.show()
+
+        median_ = kmf.median_survival_time_
+        median_confidence_interval_ = median_survival_times(kmf.confidence_interval_)
+        print(median_)
+        print(median_confidence_interval_)
+
+
+        # Instantiate each fitter
+        wb = WeibullFitter()
+        ex = ExponentialFitter()
+        log = LogNormalFitter()
+        loglogis = LogLogisticFitter()
+        # Fit to data
+        for model in [wb, ex, log, loglogis]:
+            model.fit(durations=T, event_observed=E)
+            # Print AIC
+            print("The AIC value for", model.__class__.__name__, "is", model.AIC_)
+
+
 
         # FIRST IMPLEMENTATION
-        aft = WeibullAFTFitter()
-        aft.fit(df[['deltaDateHour', 'percentualiLavorazione', 'oreLavorazione']],
-                duration_col='oreLavorazione', formula='percentualiLavorazione + deltaDateHour')
-        scale = aft.params_['lambda_']['Intercept']
-        shape = np.exp(aft.params_['rho_']['Intercept'])
+        weibull_aft = WeibullAFTFitter()
+        weibull_aft.fit(df, duration_col='oreLavorazione', event_col='fail')
+        #weibull_aft.print_summary(3)
+        scale = np.exp(weibull_aft.params_['lambda_']['Intercept'])
+        shape = np.exp(weibull_aft.params_['rho_']['Intercept'])
         print(shape, scale)
 
+        print(weibull_aft.median_survival_time_)
+        print(weibull_aft.mean_survival_time_)
+
+        '''plt.subplots(figsize=(10, 6))
+        weibull_aft.plot()
+        plt.show()'''
+
+        # Calcoliamo la funzione di sopravvivenza per i dati a partire da 1000 ore
+        sf = weibull_aft.predict_survival_function(df.mean())
+        sf.plot()
+        plt.title('Funzione di sopravvivenza stimata')
+        plt.xlabel('Tempo (ore)')
+        plt.ylabel('Probabilità di sopravvivenza')
+        plt.show()
+
+        # Converti l'indice in un array numpy e seleziona l'indice del valore più vicino a 1000 ore
+        time_of_work = 1000
+        time_idx = np.abs(sf.index.to_numpy() - time_of_work).argmin()
+        # print(time_idx)
+        # Seleziona la probabilità di sopravvivenza corrispondente all'indice trovato
+        prob_sopravvivenza = sf.iloc[time_idx, 0]
+        print(f"Probabilità di sopravvivenza: {prob_sopravvivenza:.2%}")
+
+
+
+
+
+        '''
         # SECOND IMPLEMENTATION
         wf = WeibullFitter()
         wf.fit(df['oreLavorazione'])
@@ -121,7 +193,7 @@ class PredManClass:
 
         # THIRD IMPLEMENTATION
         shape, _, scale = weibull_min.fit(df['oreLavorazione'], floc=0)
-        print(shape, scale)
+        print(shape, scale)'''
 
 
         # per confrontare l'andamento in funzione delle classi
@@ -135,7 +207,7 @@ class PredManClass:
         plt.show()'''
 
         # Calcola la distribuzione di Weibull con i parametri shape, loc e scale
-        x = np.linspace(0, 10000, 10000)
+        '''x = np.linspace(0, 10000, 10000)
         pdf = weibull_min.pdf(x, shape, scale=scale)
 
         # Grafica la distribuzione di Weibull
@@ -143,13 +215,13 @@ class PredManClass:
         plt.xlabel('Tempo di vita (ore)')
         plt.ylabel('Densità di probabilità')
         plt.title('Distribuzione di Weibull')
-        plt.show()
+        plt.show()'''
 
 
 if __name__ == "__main__":
     predManObj = PredManClass()
 
-    predManObj.some_stats()
+    # predManObj.some_stats()
 
     # predManObj.decisionTree_classifier()
 
