@@ -3,6 +3,7 @@ import pandas as pd
 import openpyxl
 import seaborn as sns
 import matplotlib.pyplot as plt
+import matplotlib.colors as mcolors
 from sklearn import tree
 from sklearn.model_selection import train_test_split
 from sklearn import metrics
@@ -104,11 +105,11 @@ class PredManClass:
         plt.show()
 
     def weibullDist(self):
-        df = self.vib_foot
-        df["fail"] = df['classe'].apply(lambda x: 0 if x == 5 else 1)
-        df = df[['deltaDateHour', 'percentualiLavorazione', 'oreLavorazione', 'fail']]
+        df = self.reduce_n_range()
+        df = df.iloc[:, 6:]
+        df["fail"] = self.vib_foot['classe'].apply(lambda x: 0 if x == 5 else 1)
 
-        print(df.dtypes)
+        print(df.head())
 
         # Standardizziamo le covariate
         '''scaler = StandardScaler()
@@ -117,7 +118,8 @@ class PredManClass:
         # Concateniamo i due DataFrame
         df = pd.concat([covariates_df, time_df], axis=1)'''
 
-        print(df.head())
+
+
 
         T = df["oreLavorazione"]
         E = df['fail']
@@ -145,6 +147,7 @@ class PredManClass:
             # Print AIC
             print("The AIC value for", model.__class__.__name__, "is", model.AIC_)
 
+
         # FIRST IMPLEMENTATION
         weibull_aft = WeibullAFTFitter()
         weibull_aft.fit(df, duration_col='oreLavorazione', event_col='fail')
@@ -156,12 +159,10 @@ class PredManClass:
         print(weibull_aft.median_survival_time_)
         print(weibull_aft.mean_survival_time_)
 
-        '''plt.subplots(figsize=(10, 6))
-        weibull_aft.plot()
-        plt.show()'''
 
-        # Calcoliamo la funzione di sopravvivenza per i dati a partire da 1000 ore
-        sf = weibull_aft.predict_survival_function(df.mean())
+        n = df.drop(['fail'], axis=1).mean()
+        n['oreLavorazione'] = 1000
+        sf = weibull_aft.predict_survival_function(n)
         sf.plot()
         plt.title('Funzione di sopravvivenza stimata')
         plt.xlabel('Tempo (ore)')
@@ -209,39 +210,40 @@ class PredManClass:
         plt.title('Distribuzione di Weibull')
         plt.show()'''
 
-    def vibration_footprint_matrix(self):
-        # i range vanno dalla colonna 9 alla 70
+    def reduce_n_range(self):
         df = self.vib_foot
         c = 0
-        for i in range(2):
-            # NON VANNO BENE I RANGE DELL'ILOC!
-            c = c + 9 if i != 0 else float(i) + 9.5
-            df[f'[{float(i) if i == 0 else c - 9}-{c})'] = df.iloc[:, 9:18].sum(axis=1)
-            # Drop columns based on column index.
-            df = df.drop(df.columns[9:18], axis=1)
-        print(df.head())
-        # print(df.head())
-        '''
-        vibration_ranges = df.columns.values.tolist()
-        # Crea un vettore numpy delle somme dei secondi trascorsi in ogni range di vibrazione
-        vibration_sums = df.sum(axis=0).to_numpy()
-        print(df.sum(axis=0).sort_values())
+        for i in range(6):
+            end = 19 if i != 5 else 20
+            # print(df.columns[9:end])
+            c = c + 10 if i != 0 else float(i) + 9.5
+            df[f'[{float(i) if i == 0 else c - 10}-{c if i != 5 else c + 1})'] = df.iloc[:, 9:end].sum(axis=1)
+            df = df.drop(df.columns[9:end], axis=1)
 
-        # Crea il grafico colorato in funzione della somma di secondi per ogni range
-        plt.imshow(vibration_sums[:, np.newaxis].T, cmap='Reds')
-        # Aggiungi la legenda dell'intensità
+        # conversione secondi in ore
+        df.iloc[:, 9:16] = df.iloc[:, 9:16].apply(lambda x: x / 3600, axis=0)
+        return df
+
+    def vibration_footprint_matrix(self):
+        df = self.reduce_n_range().iloc[:, 9:16]
+
+        vibration_ranges = df.columns.values.tolist()
+        vibration_sums = df.sum(axis=0).round(3).to_numpy()
+        print(df.sum(axis=0))
+
+        # creazione grafico
+        norm = plt.Normalize(vmin=vibration_sums.min(), vmax=vibration_sums.max())
+        plt.imshow(vibration_sums[:, np.newaxis].T, cmap='Reds', norm=norm)
         plt.colorbar()
-        plt.title('Secondi trascorsi su ogni range')
-        plt.xticks(np.arange(len(vibration_ranges)), vibration_ranges, fontsize=8, rotation=90)
+        plt.title('Ore trascorse in ogni range')
+        plt.xticks(np.arange(len(vibration_ranges)), vibration_ranges, fontsize=8, rotation=45)
         plt.yticks([])
         plt.tight_layout()
-
-        # Aggiungi i numeri all'interno dei quadranti del vettore
+        # aggiungo i numeri all'interno dei quadranti del vettore
         for i in range(len(vibration_ranges)):
-            text = plt.text(i, 0, vibration_sums[i], ha="center", va="center", color="black",fontsize=4)
-        
+            text = plt.text(i, 0, vibration_sums[i], ha="center", va="center", color="black", fontsize=10)
 
-        plt.show()'''
+        plt.show()
 
 
 if __name__ == "__main__":
@@ -251,6 +253,6 @@ if __name__ == "__main__":
 
     # predManObj.decisionTree_classifier()
 
-    # predManObj.weibullDist()
+    predManObj.weibullDist()
 
-    predManObj.vibration_footprint_matrix()
+    # predManObj.vibration_footprint_matrix()
