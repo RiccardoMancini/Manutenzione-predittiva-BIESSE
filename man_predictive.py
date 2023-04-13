@@ -10,7 +10,8 @@ from sklearn.utils import resample
 from sklearn.preprocessing import StandardScaler
 from sklearn.model_selection import KFold
 from scipy.stats import weibull_min
-from lifelines import WeibullFitter, WeibullAFTFitter, KaplanMeierFitter, ExponentialFitter, LogNormalFitter, LogLogisticFitter
+from lifelines import WeibullFitter, WeibullAFTFitter, KaplanMeierFitter, ExponentialFitter, LogNormalFitter, \
+    LogLogisticFitter
 from lifelines.utils import k_fold_cross_validation, median_survival_times
 
 import datetime as dt
@@ -109,7 +110,6 @@ class PredManClass:
 
         print(df.dtypes)
 
-
         # Standardizziamo le covariate
         '''scaler = StandardScaler()
         covariates_df_standardized = scaler.fit_transform(df[['deltaDateHour', 'deltaDateHour']])
@@ -134,7 +134,6 @@ class PredManClass:
         print(median_)
         print(median_confidence_interval_)
 
-
         # Instantiate each fitter
         wb = WeibullFitter()
         ex = ExponentialFitter()
@@ -146,12 +145,10 @@ class PredManClass:
             # Print AIC
             print("The AIC value for", model.__class__.__name__, "is", model.AIC_)
 
-
-
         # FIRST IMPLEMENTATION
         weibull_aft = WeibullAFTFitter()
         weibull_aft.fit(df, duration_col='oreLavorazione', event_col='fail')
-        #weibull_aft.print_summary(3)
+        # weibull_aft.print_summary(3)
         scale = np.exp(weibull_aft.params_['lambda_']['Intercept'])
         shape = np.exp(weibull_aft.params_['rho_']['Intercept'])
         print(shape, scale)
@@ -179,7 +176,6 @@ class PredManClass:
         prob_sopravvivenza = sf.iloc[time_idx, 0]
         print(f"Probabilità di sopravvivenza: {prob_sopravvivenza:.2%}")
 
-
         '''
         # SECOND IMPLEMENTATION
         wf = WeibullFitter()
@@ -191,7 +187,6 @@ class PredManClass:
         # THIRD IMPLEMENTATION
         shape, _, scale = weibull_min.fit(df['oreLavorazione'], floc=0)
         print(shape, scale)'''
-
 
         # per confrontare l'andamento in funzione delle classi
         '''ax = plt.subplot(111)
@@ -215,33 +210,38 @@ class PredManClass:
         plt.show()'''
 
     def vibration_footprint_matrix(self):
-        # Definisci i range di vibrazione e i secondi trascorsi in ogni range
-        vibration_ranges = ["0-1", "1-2", "2-3", "3-4", "4-5"]
-        vibration_seconds = [[100, 200, 150, 50, 20],  # Riga 0-1
-                             [50, 80, 120, 100, 70],  # Riga 1-2
-                             [30, 60, 100, 80, 40],  # Riga 2-3
-                             [10, 30, 50, 70, 100],  # Riga 3-4
-                             [5, 10, 20, 30, 50]]  # Riga 4-5
-
+        # i range vanno dalla colonna 9 alla 70
+        df = self.vib_foot
+        c = 0
+        for i in range(2):
+            # NON VANNO BENE I RANGE DELL'ILOC!
+            c = c + 9 if i != 0 else float(i) + 9.5
+            df[f'[{float(i) if i == 0 else c - 9}-{c})'] = df.iloc[:, 9:18].sum(axis=1)
+            # Drop columns based on column index.
+            df = df.drop(df.columns[9:18], axis=1)
+        print(df.head())
+        # print(df.head())
+        '''
+        vibration_ranges = df.columns.values.tolist()
         # Crea un vettore numpy delle somme dei secondi trascorsi in ogni range di vibrazione
-        vibration_sums = np.sum(vibration_seconds, axis=1)
-
+        vibration_sums = df.sum(axis=0).to_numpy()
+        print(df.sum(axis=0).sort_values())
 
         # Crea il grafico colorato in funzione della somma di secondi per ogni range
         plt.imshow(vibration_sums[:, np.newaxis].T, cmap='Reds')
         # Aggiungi la legenda dell'intensità
         plt.colorbar()
         plt.title('Secondi trascorsi su ogni range')
-        plt.xticks(np.arange(len(vibration_ranges)), vibration_ranges)
+        plt.xticks(np.arange(len(vibration_ranges)), vibration_ranges, fontsize=8, rotation=90)
         plt.yticks([])
+        plt.tight_layout()
 
         # Aggiungi i numeri all'interno dei quadranti del vettore
         for i in range(len(vibration_ranges)):
-            text = plt.text(i, 0, vibration_sums[i], ha="center", va="center", color="black")
+            text = plt.text(i, 0, vibration_sums[i], ha="center", va="center", color="black",fontsize=4)
+        
 
-
-        plt.show()
-
+        plt.show()'''
 
 
 if __name__ == "__main__":
