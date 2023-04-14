@@ -107,7 +107,7 @@ class PredManClass:
     def weibullDist(self):
         df = self.reduce_n_range()
         df = df.iloc[:, 6:]
-        df["fail"] = self.vib_foot['classe'].apply(lambda x: 0 if x == 5 else 1)
+        #df["fail"] = self.vib_foot['classe'].apply(lambda x: 0 if x == 5 else 1)
 
         print(df.head())
 
@@ -121,7 +121,7 @@ class PredManClass:
 
 
 
-        T = df["oreLavorazione"]
+        '''T = df["oreLavorazione"]
         E = df['fail']
         plt.hist(T, bins=50)
         plt.show()
@@ -145,13 +145,13 @@ class PredManClass:
         for model in [wb, ex, log, loglogis]:
             model.fit(durations=T, event_observed=E)
             # Print AIC
-            print("The AIC value for", model.__class__.__name__, "is", model.AIC_)
+            print("The AIC value for", model.__class__.__name__, "is", model.AIC_)'''
 
 
         # FIRST IMPLEMENTATION
         weibull_aft = WeibullAFTFitter()
-        weibull_aft.fit(df, duration_col='oreLavorazione', event_col='fail')
-        # weibull_aft.print_summary(3)
+        weibull_aft.fit(df, duration_col='oreLavorazione')
+        #weibull_aft.print_summary(3)
         scale = np.exp(weibull_aft.params_['lambda_']['Intercept'])
         shape = np.exp(weibull_aft.params_['rho_']['Intercept'])
         print(shape, scale)
@@ -159,8 +159,23 @@ class PredManClass:
         print(weibull_aft.median_survival_time_)
         print(weibull_aft.mean_survival_time_)
 
+        new_data = pd.DataFrame({
+            'deltaDateHour': [825],
+            'percentualiLavorazione': [20],
+            '[0.0-9.5)': [300],
+            '[9.5-19.5)': [5.6],
+            '[19.5-29.5)': [1.2],
+            '[29.5-39.5)': [0],
+            '[39.5-49.5)': [0],
+            '[49.5-60.5)': [0]
+        })
 
-        n = df.drop(['fail'], axis=1).mean()
+        predicted_expectation = weibull_aft.predict_expectation(new_data)
+        print(predicted_expectation)
+
+
+        # prendo la baseline, quindi un comportamento medio
+        n = df.mean()
         n['oreLavorazione'] = 1000
         sf = weibull_aft.predict_survival_function(n)
         sf.plot()
