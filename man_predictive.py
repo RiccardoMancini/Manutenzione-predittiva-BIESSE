@@ -106,8 +106,8 @@ class PredManClass:
 
     def weibullDist(self):
         df = self.reduce_n_range()
-        df = df.iloc[:, 6:]
-        #df["fail"] = self.vib_foot['classe'].apply(lambda x: 0 if x == 5 else 1)
+        df = df.iloc[:, 6:8]
+        df["fail"] = self.vib_foot['classe'].apply(lambda x: 0 if x == 5 else 1)
 
         print(df.head())
 
@@ -150,8 +150,13 @@ class PredManClass:
 
         # FIRST IMPLEMENTATION
         weibull_aft = WeibullAFTFitter()
-        weibull_aft.fit(df, duration_col='oreLavorazione')
+        scores = k_fold_cross_validation(weibull_aft, df, 'oreLavorazione', event_col='fail', k=5,
+                                         scoring_method="concordance_index")
+        print(scores)
+
+        '''weibull_aft.fit(df, duration_col='oreLavorazione', event_col='fail')
         #weibull_aft.print_summary(3)
+        '''
         scale = np.exp(weibull_aft.params_['lambda_']['Intercept'])
         shape = np.exp(weibull_aft.params_['rho_']['Intercept'])
         print(shape, scale)
@@ -159,15 +164,12 @@ class PredManClass:
         print(weibull_aft.median_survival_time_)
         print(weibull_aft.mean_survival_time_)
 
+
+
+
         new_data = pd.DataFrame({
             'deltaDateHour': [825],
-            'percentualiLavorazione': [20],
-            '[0.0-9.5)': [300],
-            '[9.5-19.5)': [5.6],
-            '[19.5-29.5)': [1.2],
-            '[29.5-39.5)': [0],
-            '[39.5-49.5)': [0],
-            '[49.5-60.5)': [0]
+            'fail': [0]
         })
 
         predicted_expectation = weibull_aft.predict_expectation(new_data)
