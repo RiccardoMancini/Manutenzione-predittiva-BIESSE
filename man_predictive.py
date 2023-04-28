@@ -21,13 +21,13 @@ import datetime as dt
 class PredManClass:
 
     def __init__(self):
-        self.vib_foot = pd.read_excel('VibrationFootprints.xlsx', sheet_name='Foglio1')
+        self.vib_foot = pd.read_excel('VibrationFootprints.xlsx', sheet_name='VibrationFootprints')
 
         # conversione in timestamp
         self.vib_foot['startDate'] = self.vib_foot['startDate'].astype('int64') // 10 ** 9
         self.vib_foot['endDate'] = self.vib_foot['endDate'].astype('int64') // 10 ** 9
 
-        print(self.vib_foot.shape)
+        print(self.vib_foot.head())
 
     def some_stats(self):
         df = self.vib_foot
@@ -35,7 +35,7 @@ class PredManClass:
         print('N° sample x classe:')
         print(v)
 
-        col = 'oreLavorazione'
+        col = 'Ore_lav_totali'
         # Istogramma
         sns.histplot(data=df, x=col, bins=50, kde=True, alpha=0.5)
         plt.xlabel('Valori')
@@ -45,7 +45,7 @@ class PredManClass:
 
         # Some visualization...
         kmf = KaplanMeierFitter()
-        kmf.fit(durations=df['oreLavorazione'])
+        kmf.fit(durations=df[col])
         kmf.plot_survival_function()
         plt.show()
         kmf.plot_cumulative_density()
@@ -266,10 +266,10 @@ class PredManClass:
 if __name__ == "__main__":
     predManObj = PredManClass()
 
-    # predManObj.some_stats()
+    predManObj.some_stats()
 
     # predManObj.decisionTree_classifier()
 
-    predManObj.weibullDist()
+    # predManObj.weibullDist()
 
     # predManObj.vibration_footprint_matrix()
