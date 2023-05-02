@@ -105,20 +105,12 @@ class PredManClass:
         plt.show()
 
     def weibullDist(self):
-        df = self.reduce_n_range()
-        df = df.iloc[:, 6:8]
+        '''df = self.reduce_n_range()
+        df = df.iloc[:, 6:8]'''
+        df = self.vib_foot.iloc[:, 6:8]
         df["fail"] = self.vib_foot['classe'].apply(lambda x: 0 if x == 5 else 1)
 
         print(df.head())
-
-        # Standardizziamo le covariate
-        '''scaler = StandardScaler()
-        covariates_df_standardized = scaler.fit_transform(df[['deltaDateHour', 'deltaDateHour']])
-        covariates_df = pd.DataFrame(covariates_df_standardized, columns=['deltaDateHour', 'percentualiLavorazione'])
-        # Concateniamo i due DataFrame
-        df = pd.concat([covariates_df, time_df], axis=1)'''
-
-
 
 
         '''T = df["oreLavorazione"]
@@ -150,21 +142,19 @@ class PredManClass:
 
         # FIRST IMPLEMENTATION
         weibull_aft = WeibullAFTFitter()
-        scores = k_fold_cross_validation(weibull_aft, df, 'oreLavorazione', event_col='fail', k=5,
+        '''scores = k_fold_cross_validation(weibull_aft, df, 'Ore_lav_totali', event_col='fail', k=5,
                                          scoring_method="concordance_index")
-        print(scores)
+        print(scores)'''
 
-        '''weibull_aft.fit(df, duration_col='oreLavorazione', event_col='fail')
+        weibull_aft.fit(df, duration_col='Ore_lav_totali', event_col='fail')
         #weibull_aft.print_summary(3)
-        '''
+        
         scale = np.exp(weibull_aft.params_['lambda_']['Intercept'])
         shape = np.exp(weibull_aft.params_['rho_']['Intercept'])
         print(shape, scale)
 
         print(weibull_aft.median_survival_time_)
         print(weibull_aft.mean_survival_time_)
-
-
 
 
         new_data = pd.DataFrame({
@@ -185,14 +175,14 @@ class PredManClass:
         plt.xlabel('Tempo (ore)')
         plt.ylabel('Probabilità di sopravvivenza')
         plt.show()
-
+        '''
         # Converti l'indice in un array numpy e seleziona l'indice del valore più vicino a 1000 ore
         time_of_work = 1000
         time_idx = np.abs(sf.index.to_numpy() - time_of_work).argmin()
         # print(time_idx)
         # Seleziona la probabilità di sopravvivenza corrispondente all'indice trovato
         prob_sopravvivenza = sf.iloc[time_idx, 0]
-        print(f"Probabilità di sopravvivenza: {prob_sopravvivenza:.2%}")
+        print(f"Probabilità di sopravvivenza: {prob_sopravvivenza:.2%}")'''
 
         '''
         # SECOND IMPLEMENTATION
@@ -266,10 +256,10 @@ class PredManClass:
 if __name__ == "__main__":
     predManObj = PredManClass()
 
-    predManObj.some_stats()
+    # predManObj.some_stats()
 
     # predManObj.decisionTree_classifier()
 
-    # predManObj.weibullDist()
+    predManObj.weibullDist()
 
     # predManObj.vibration_footprint_matrix()
