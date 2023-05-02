@@ -168,7 +168,7 @@ class PredManClass:
 
         # prendo la baseline, quindi un comportamento medio
         n = df.mean()
-        n['oreLavorazione'] = 1000
+        n['Ore_lav_totali'] = 1000
         sf = weibull_aft.predict_survival_function(n)
         sf.plot()
         plt.title('Funzione di sopravvivenza stimata')
