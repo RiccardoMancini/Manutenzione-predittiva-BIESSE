@@ -9,6 +9,7 @@ from sklearn import tree
 from sklearn.model_selection import train_test_split
 from sklearn import metrics
 from sklearn.utils import resample
+from sklearn.neighbors import NearestNeighbors
 from sklearn.preprocessing import StandardScaler
 from sklearn.model_selection import KFold
 from scipy.stats import weibull_min
@@ -17,6 +18,7 @@ from lifelines import WeibullFitter, WeibullAFTFitter, KaplanMeierFitter, Expone
 from lifelines.utils import k_fold_cross_validation, median_survival_times
 from collections import Counter
 import datetime as dt
+from smogn import smoter
 
 
 class PredManClass:
@@ -57,15 +59,79 @@ class PredManClass:
         print(median_)
         print(median_confidence_interval_)
 
+    def overSample(self):
+        def add_gaussian_noise(X, mu=0, sigma=0.1):
+            return X + np.random.normal(mu, sigma, size=X.shape)
+
+        def smote_gn(df, k=4, n=7):
+            """
+            df: pandas.DataFrame
+                The input dataframe.
+            k: int (default=5)
+                The number of nearest neighbors to use when generating synthetic samples.
+            n: int (default=100)
+                The number of synthetic samples to generate.
+            """
+            # Convert dataframe to numpy array
+            X = df.to_numpy()
+
+            # Find k nearest neighbors
+            nn = NearestNeighbors(n_neighbors=k + 1).fit(X)
+            distances, indices = nn.kneighbors(X)
+
+            # Generate synthetic samples
+            synthetic_samples = []
+            for i in range(len(indices)):
+                for j in range(n):
+                    # Select a random neighbor
+                    neighbor_index = np.random.choice(indices[i][1:])
+                    # Generate synthetic sample
+                    synthetic_sample = add_gaussian_noise(X[i] + np.random.rand() * (X[neighbor_index] - X[i]))
+                    synthetic_samples.append(synthetic_sample)
+
+            X_resampled = np.vstack((X, synthetic_samples))
+
+            # Convert oversampled data back to dataframe
+            columns = df.columns.tolist()
+            X_resampled_df = pd.DataFrame(X_resampled, columns=columns)
+
+            return X_resampled_df
+
+        vibration_de = self.vib_foot[self.vib_foot['classe'] == 3]
+        vibration_de = vibration_de.iloc[:, 13:].apply(lambda x: x / 3600, axis=0)
+
+        print(vibration_de.head())
+
+        df_res = smote_gn(vibration_de)
+
+        '''# Apply SMOTE with Gaussian noise
+        df = smoter(
+            data=vibration_de,
+            k=5,
+            rel_thres=0.8,
+            rel_method="range",
+            rel_coef=1.5
+        )'''
+
+        df_res[df_res < 0.01] = 0
+        df_res['total'] = df_res[list(df_res.columns)].sum(axis=1)
+        print(df_res.head(), df_res.shape)
+        df_res.to_excel('overS.xlsx')
+
     def component_correlation(self):
         vibration_al = self.vib_foot[self.vib_foot['classe'] != 3].iloc[:, 13:]
         vibration_de = self.vib_foot[self.vib_foot['classe'] == 3].iloc[:, 13:]
+
+        vibration_al = vibration_al.apply(lambda x: x / 3600, axis=0)
+        vibration_de = vibration_de.apply(lambda x: x / 3600, axis=0)
+
+        print(vibration_de.head(), vibration_al.head())
         print(vibration_de.shape[0], vibration_al.shape[0])
 
         '''vibration_de.iloc[5].plot.hist(bins=12, alpha=0.5)
         plt.show()'''
 
-        corMat = []
+        '''corMat = []
         c = []
         for i in range(0, vibration_de.shape[0]):
             for j in range(0, vibration_al.shape[0]):
@@ -75,7 +141,7 @@ class PredManClass:
 
         matpvalue = pd.DataFrame(c)
         #print(matpvalue.head(), matpvalue.shape)
-        print(Counter(matpvalue.idxmin().tolist()))
+        print(Counter(matpvalue.idxmin().tolist()))'''
 
         corMat = []
         c = []
@@ -86,9 +152,12 @@ class PredManClass:
             corMat = []
 
         matpvalue = pd.DataFrame(c)
-        #print(matpvalue.head(), matpvalue.shape)
+        matpvalue = (matpvalue - matpvalue.min()) / (matpvalue.max() - matpvalue.min())
+        print(matpvalue.head(), matpvalue.shape)
 
-        print(Counter(matpvalue.idxmax().tolist()))
+        matpvalue.transpose().to_excel("dist.xlsx", sheet_name='Euclidean_dist')
+
+        # print(Counter(matpvalue.idxmax().tolist()))
 
     def decisionTree_classifier(self):
         # rimuoviamo temporaneamente il campione della classe con un solo campione
@@ -146,7 +215,6 @@ class PredManClass:
 
         print(df.head())
 
-
         '''T = df["oreLavorazione"]
         E = df['fail']
         plt.hist(T, bins=50)
@@ -173,7 +241,6 @@ class PredManClass:
             # Print AIC
             print("The AIC value for", model.__class__.__name__, "is", model.AIC_)'''
 
-
         # FIRST IMPLEMENTATION
         weibull_aft = WeibullAFTFitter()
         '''scores = k_fold_cross_validation(weibull_aft, df, 'Ore_lav_totali', event_col='fail', k=5,
@@ -181,15 +248,14 @@ class PredManClass:
         print(scores)'''
 
         weibull_aft.fit(df, duration_col='Ore_lav_totali', event_col='fail')
-        #weibull_aft.print_summary(3)
-        
+        # weibull_aft.print_summary(3)
+
         scale = np.exp(weibull_aft.params_['lambda_']['Intercept'])
         shape = np.exp(weibull_aft.params_['rho_']['Intercept'])
         print(shape, scale)
 
         print(weibull_aft.median_survival_time_)
         print(weibull_aft.mean_survival_time_)
-
 
         new_data = pd.DataFrame({
             'deltaDateHour': [825],
@@ -198,7 +264,6 @@ class PredManClass:
 
         predicted_expectation = weibull_aft.predict_expectation(new_data)
         print(predicted_expectation)
-
 
         # prendo la baseline, quindi un comportamento medio
         n = df.mean()
@@ -292,7 +357,9 @@ if __name__ == "__main__":
 
     # predManObj.some_stats()
 
-    predManObj.component_correlation()
+    predManObj.overSample()
+
+    # predManObj.component_correlation()
 
     # predManObj.decisionTree_classifier()
 
