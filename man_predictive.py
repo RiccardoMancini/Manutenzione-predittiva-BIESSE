@@ -4,6 +4,7 @@ import openpyxl
 import seaborn as sns
 import matplotlib.pyplot as plt
 import matplotlib.colors as mcolors
+from scipy import stats
 from sklearn import tree
 from sklearn.model_selection import train_test_split
 from sklearn import metrics
@@ -14,7 +15,7 @@ from scipy.stats import weibull_min
 from lifelines import WeibullFitter, WeibullAFTFitter, KaplanMeierFitter, ExponentialFitter, LogNormalFitter, \
     LogLogisticFitter
 from lifelines.utils import k_fold_cross_validation, median_survival_times
-
+from collections import Counter
 import datetime as dt
 
 
@@ -55,6 +56,39 @@ class PredManClass:
         median_confidence_interval_ = median_survival_times(kmf.confidence_interval_)
         print(median_)
         print(median_confidence_interval_)
+
+    def component_correlation(self):
+        vibration_al = self.vib_foot[self.vib_foot['classe'] != 3].iloc[:, 13:]
+        vibration_de = self.vib_foot[self.vib_foot['classe'] == 3].iloc[:, 13:]
+        print(vibration_de.shape[0], vibration_al.shape[0])
+
+        '''vibration_de.iloc[5].plot.hist(bins=12, alpha=0.5)
+        plt.show()'''
+
+        corMat = []
+        c = []
+        for i in range(0, vibration_de.shape[0]):
+            for j in range(0, vibration_al.shape[0]):
+                corMat.append(stats.ks_2samp(vibration_al.iloc[j], vibration_de.iloc[i]).pvalue)
+            c.append(corMat)
+            corMat = []
+
+        matpvalue = pd.DataFrame(c)
+        #print(matpvalue.head(), matpvalue.shape)
+        print(Counter(matpvalue.idxmin().tolist()))
+
+        corMat = []
+        c = []
+        for i in range(0, vibration_de.shape[0]):
+            for j in range(0, vibration_al.shape[0]):
+                corMat.append(np.linalg.norm(vibration_al.iloc[j] - vibration_de.iloc[i]))
+            c.append(corMat)
+            corMat = []
+
+        matpvalue = pd.DataFrame(c)
+        #print(matpvalue.head(), matpvalue.shape)
+
+        print(Counter(matpvalue.idxmax().tolist()))
 
     def decisionTree_classifier(self):
         # rimuoviamo temporaneamente il campione della classe con un solo campione
@@ -258,8 +292,10 @@ if __name__ == "__main__":
 
     # predManObj.some_stats()
 
+    predManObj.component_correlation()
+
     # predManObj.decisionTree_classifier()
 
-    predManObj.weibullDist()
+    # predManObj.weibullDist()
 
     # predManObj.vibration_footprint_matrix()
