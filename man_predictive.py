@@ -25,12 +25,7 @@ class PredManClass:
 
     def __init__(self):
         self.vib_foot = pd.read_excel('VibrationFootprints.xlsx', sheet_name='VibrationFootprints')
-
-        # conversione in timestamp
-        self.vib_foot['startDate'] = self.vib_foot['startDate'].astype('int64') // 10 ** 9
-        self.vib_foot['endDate'] = self.vib_foot['endDate'].astype('int64') // 10 ** 9
-
-        print(self.vib_foot.head())
+        self.pre_process()
 
     def some_stats(self):
         df = self.vib_foot
@@ -58,6 +53,24 @@ class PredManClass:
         median_confidence_interval_ = median_survival_times(kmf.confidence_interval_)
         print(median_)
         print(median_confidence_interval_)
+
+    def pre_process(self):
+        # conversione in timestamp
+        self.vib_foot['startDate'] = self.vib_foot['startDate'].astype('int64') // 10 ** 9
+        self.vib_foot['endDate'] = self.vib_foot['endDate'].astype('int64') // 10 ** 9
+
+        # converti secondi in ore negli intervalli delle vibrazioni
+        self.vib_foot.iloc[:, 13:] = self.vib_foot.iloc[:, 13:].apply(lambda x: x / 3600, axis=0)
+
+        # aggiungi le ore mancanti
+        self.vib_foot['Ore_lav_totali'] = self.vib_foot['Ore_lav_totali'] + self.vib_foot['Ore lav manc']
+
+        # rimuovi colonne inutili
+        self.vib_foot = self.vib_foot.drop(['snMacchina', 'snEm', 'tp', 'startDate', 'endDate',
+                                            'Perc ore lav', 'Lav mancanti', 'Perc lav manc',
+                                            'Ore lav manc', 'Perc ore manc'], axis=1)
+
+        # print(self.vib_foot.shape, self.vib_foot.head())
 
     def overSample(self):
         def add_gaussian_noise(X, mu=0, sigma=0.1):
@@ -97,51 +110,25 @@ class PredManClass:
 
             return X_resampled_df
 
-        vibration_de = self.vib_foot[self.vib_foot['classe'] == 3]
-        vibration_de = vibration_de.iloc[:, 13:].apply(lambda x: x / 3600, axis=0)
+        vibration_de = self.vib_foot[self.vib_foot['classe'] == 3].iloc[:, 1:]\
+            .drop(['Ore_lav_totali'], axis=1)
+        print(vibration_de.shape, vibration_de.head())
 
-        print(vibration_de.head())
+        print(vibration_de.std())
 
-        df_res = smote_gn(vibration_de)
+        '''df_res = smote_gn(vibration_de)
 
-        '''# Apply SMOTE with Gaussian noise
-        df = smoter(
-            data=vibration_de,
-            k=5,
-            rel_thres=0.8,
-            rel_method="range",
-            rel_coef=1.5
-        )'''
-
-        df_res[df_res < 0.01] = 0
-        df_res['total'] = df_res[list(df_res.columns)].sum(axis=1)
+        #df_res[df_res < 0.01] = 0
+        df_res['total'] = df_res[list(df_res.columns[1:])].sum(axis=1)
         print(df_res.head(), df_res.shape)
-        df_res.to_excel('overS.xlsx')
+        df_res.to_excel('overS.xlsx')'''
 
     def component_correlation(self):
         vibration_al = self.vib_foot[self.vib_foot['classe'] != 3].iloc[:, 13:]
         vibration_de = self.vib_foot[self.vib_foot['classe'] == 3].iloc[:, 13:]
 
-        vibration_al = vibration_al.apply(lambda x: x / 3600, axis=0)
-        vibration_de = vibration_de.apply(lambda x: x / 3600, axis=0)
-
-        print(vibration_de.head(), vibration_al.head())
-        print(vibration_de.shape[0], vibration_al.shape[0])
-
-        '''vibration_de.iloc[5].plot.hist(bins=12, alpha=0.5)
-        plt.show()'''
-
-        '''corMat = []
-        c = []
-        for i in range(0, vibration_de.shape[0]):
-            for j in range(0, vibration_al.shape[0]):
-                corMat.append(stats.ks_2samp(vibration_al.iloc[j], vibration_de.iloc[i]).pvalue)
-            c.append(corMat)
-            corMat = []
-
-        matpvalue = pd.DataFrame(c)
-        #print(matpvalue.head(), matpvalue.shape)
-        print(Counter(matpvalue.idxmin().tolist()))'''
+        # print(vibration_de.head(), vibration_al.head())
+        print(vibration_de.shape, vibration_al.shape)
 
         corMat = []
         c = []
