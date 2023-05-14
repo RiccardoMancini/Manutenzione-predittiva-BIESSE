@@ -18,7 +18,6 @@ from lifelines import WeibullFitter, WeibullAFTFitter, KaplanMeierFitter, Expone
 from lifelines.utils import k_fold_cross_validation, median_survival_times
 from collections import Counter
 import datetime as dt
-from smogn import smoter
 
 
 class PredManClass:
@@ -73,55 +72,64 @@ class PredManClass:
         # print(self.vib_foot.shape, self.vib_foot.head())
 
     def overSample(self):
-        def add_gaussian_noise(X, mu=0, sigma=0.1):
-            return X + np.random.normal(mu, sigma, size=X.shape)
 
-        def smote_gn(df, k=4, n=7):
+        def oversample_with_gaussian_noise(data, n_samples, noise_ratio=0.3):
             """
-            df: pandas.DataFrame
-                The input dataframe.
-            k: int (default=5)
-                The number of nearest neighbors to use when generating synthetic samples.
-            n: int (default=100)
-                The number of synthetic samples to generate.
+            Oversampling con gaussian noise.
+
+            Parameters
+            ----------
+            data : pandas.DataFrame
+                Il dataframe contenente i dati originali.
+            n_samples : int
+                Il numero di campioni sintetici da generare.
+            noise_ratio : float, optional (default=0.1)
+                Il rapporto tra la deviazione standard del rumore e quella della feature.
+
+            Returns
+            -------
+            pandas.DataFrame
+                Il dataframe contenente i dati originali e i campioni sintetici generati.
             """
-            # Convert dataframe to numpy array
-            X = df.to_numpy()
 
-            # Find k nearest neighbors
-            nn = NearestNeighbors(n_neighbors=k + 1).fit(X)
-            distances, indices = nn.kneighbors(X)
+            # Creazione del dataframe vuoto per i dati sintetici
+            synthetic_data = pd.DataFrame(columns=data.columns)
 
-            # Generate synthetic samples
-            synthetic_samples = []
-            for i in range(len(indices)):
-                for j in range(n):
-                    # Select a random neighbor
-                    neighbor_index = np.random.choice(indices[i][1:])
-                    # Generate synthetic sample
-                    synthetic_sample = add_gaussian_noise(X[i] + np.random.rand() * (X[neighbor_index] - X[i]))
-                    synthetic_samples.append(synthetic_sample)
+            # Calcolo delle deviazioni standard per le feature
+            stds = data.std()
 
-            X_resampled = np.vstack((X, synthetic_samples))
+            # Generazione di rumore gaussiano con deviazioni standard proporzionali
+            noise = np.clip(np.random.normal(0, stds*noise_ratio, size=(n_samples, len(data.columns))), a_min=0, a_max=None)
 
-            # Convert oversampled data back to dataframe
-            columns = df.columns.tolist()
-            X_resampled_df = pd.DataFrame(X_resampled, columns=columns)
+            # Ripetizione n_samples volte
+            for i in range(n_samples):
+                # Estrazione random di un sample dal dataframe dei dati originali
+                sample = data.sample(n=1, replace=True)
 
-            return X_resampled_df
+                # Aggiunta del rumore gaussiano al sample estratto
+                synthetic_sample = sample.values + noise[i, :]
+
+                # Creazione del dataframe per il campione sintetico
+                synthetic_sample_df = pd.DataFrame(synthetic_sample, columns=data.columns)
+
+                # Aggiunta del campione sintetico al dataframe dei dati sintetici
+                synthetic_data = pd.concat([synthetic_data, synthetic_sample_df], axis=0)
+
+            # Unione dei dati originali e sintetici
+            oversampled_data = pd.concat([data, synthetic_data], axis=0)
+
+            return oversampled_data
 
         vibration_de = self.vib_foot[self.vib_foot['classe'] == 3].iloc[:, 1:]\
             .drop(['Ore_lav_totali'], axis=1)
         print(vibration_de.shape, vibration_de.head())
 
-        print(vibration_de.std())
+        df_res = oversample_with_gaussian_noise(vibration_de, 20)
 
-        '''df_res = smote_gn(vibration_de)
-
-        #df_res[df_res < 0.01] = 0
         df_res['total'] = df_res[list(df_res.columns[1:])].sum(axis=1)
         print(df_res.head(), df_res.shape)
-        df_res.to_excel('overS.xlsx')'''
+        df_res.to_excel('overS.xlsx')
+        return df_res
 
     def component_correlation(self):
         vibration_al = self.vib_foot[self.vib_foot['classe'] != 3].iloc[:, 13:]
@@ -195,28 +203,20 @@ class PredManClass:
         plt.show()
 
     def weibullDist(self):
-        '''df = self.reduce_n_range()
-        df = df.iloc[:, 6:8]'''
-        df = self.vib_foot.iloc[:, 6:8]
-        df["fail"] = self.vib_foot['classe'].apply(lambda x: 0 if x == 5 else 1)
 
+        '''df = self.vib_foot[self.vib_foot['classe'] == 3].iloc[:, 1:8]
+        total = df['Ore_lav_totali']
+        df = df.drop(['Ore_lav_totali'], axis=1)
+        #df = (df - df.min()) / (df.max() - df.min())
+        df['total'] = total'''
+
+        df = self.overSample().reset_index(drop=True)
+        total = df['total']
+        df = df.iloc[:, :20]
+        df = (df - df.min()) / (df.max() - df.min())
+        df['total'] = total
         print(df.head())
-
-        '''T = df["oreLavorazione"]
-        E = df['fail']
-        plt.hist(T, bins=50)
-        plt.show()
-
-        kmf = KaplanMeierFitter()
-        kmf.fit(durations=T, event_observed=E)
-        kmf.plot_survival_function()
-        plt.show()
-
-        median_ = kmf.median_survival_time_
-        median_confidence_interval_ = median_survival_times(kmf.confidence_interval_)
-        print(median_)
-        print(median_confidence_interval_)
-
+        '''
         # Instantiate each fitter
         wb = WeibullFitter()
         ex = ExponentialFitter()
@@ -230,11 +230,11 @@ class PredManClass:
 
         # FIRST IMPLEMENTATION
         weibull_aft = WeibullAFTFitter()
-        '''scores = k_fold_cross_validation(weibull_aft, df, 'Ore_lav_totali', event_col='fail', k=5,
-                                         scoring_method="concordance_index")
-        print(scores)'''
+        #scores = k_fold_cross_validation(weibull_aft, df, 'Ore_lav_totali', event_col='fail', k=5,
+        #                                 scoring_method="concordance_index")
+        #print(scores)
 
-        weibull_aft.fit(df, duration_col='Ore_lav_totali', event_col='fail')
+        weibull_aft.fit(df, duration_col='total')
         # weibull_aft.print_summary(3)
 
         scale = np.exp(weibull_aft.params_['lambda_']['Intercept'])
@@ -244,9 +244,20 @@ class PredManClass:
         print(weibull_aft.median_survival_time_)
         print(weibull_aft.mean_survival_time_)
 
+
+
+
         new_data = pd.DataFrame({
-            'deltaDateHour': [825],
-            'fail': [0]
+            'deltaDateHour': [0.1],
+            '[0.0-0.5)': [0.057458],
+            '[0.5-1.5)': [0.242222],
+            '[1.5-2.5)': [0.939437],
+            '[2.5-3.5)': [0.857859],
+            '[3.5-4.5)': [0.961374],
+            '[4.5-5.5)': [0.965228],
+            '[5.5-6.5)': [0.847450],
+            '[6.5-7.5)': [0.464702],
+            '[7.5-8.5)': [0.216032]
         })
 
         predicted_expectation = weibull_aft.predict_expectation(new_data)
@@ -254,13 +265,23 @@ class PredManClass:
 
         # prendo la baseline, quindi un comportamento medio
         n = df.mean()
-        n['Ore_lav_totali'] = 1000
-        sf = weibull_aft.predict_survival_function(n)
+        #n['Ore_lav_totali'] = 1000
+        sf = weibull_aft.predict_survival_function(new_data.append(n, ignore_index=True))
+        sf.plot()
+        plt.title('Funzione di sopravvivenza stimata')
+        plt.xlabel('Tempo (ore)')
+        plt.xlim([0, 700])
+        plt.ylabel('Probabilità di sopravvivenza')
+        plt.show()
+
+        sf = weibull_aft.predict_hazard(new_data)
         sf.plot()
         plt.title('Funzione di sopravvivenza stimata')
         plt.xlabel('Tempo (ore)')
         plt.ylabel('Probabilità di sopravvivenza')
         plt.show()
+
+
         '''
         # Converti l'indice in un array numpy e seleziona l'indice del valore più vicino a 1000 ore
         time_of_work = 1000
@@ -270,30 +291,22 @@ class PredManClass:
         prob_sopravvivenza = sf.iloc[time_idx, 0]
         print(f"Probabilità di sopravvivenza: {prob_sopravvivenza:.2%}")'''
 
-        '''
+
         # SECOND IMPLEMENTATION
-        wf = WeibullFitter()
-        wf.fit(df['oreLavorazione'])
+        '''wf = WeibullFitter()
+        wf.fit(df['total'])
         scale = wf.lambda_
         shape = wf.rho_
-        print(shape, scale)
-
-        # THIRD IMPLEMENTATION
-        shape, _, scale = weibull_min.fit(df['oreLavorazione'], floc=0)
         print(shape, scale)'''
 
-        # per confrontare l'andamento in funzione delle classi
-        '''ax = plt.subplot(111)
-        m = (df["classe"] == 5)
-        kmf.fit(durations=df['oreLavorazione'][m], label="Class 5")
-        kmf.plot_survival_function(ax=ax)
-        kmf.fit(df['oreLavorazione'][~m], label="Others class")
-        kmf.plot_survival_function(ax=ax, at_risk_counts=True)
-        plt.title("Survival of components")
-        plt.show()'''
+
+
+        # THIRD IMPLEMENTATION
+        '''shape, _, scale = weibull_min.fit(df['total'], floc=0)
+        print(shape, scale)'''
 
         # Calcola la distribuzione di Weibull con i parametri shape, loc e scale
-        '''x = np.linspace(0, 10000, 10000)
+        x = np.linspace(0, 200, 200)
         pdf = weibull_min.pdf(x, shape, scale=scale)
 
         # Grafica la distribuzione di Weibull
@@ -301,7 +314,7 @@ class PredManClass:
         plt.xlabel('Tempo di vita (ore)')
         plt.ylabel('Densità di probabilità')
         plt.title('Distribuzione di Weibull')
-        plt.show()'''
+        plt.show()
 
     def reduce_n_range(self):
         df = self.vib_foot
@@ -344,12 +357,12 @@ if __name__ == "__main__":
 
     # predManObj.some_stats()
 
-    predManObj.overSample()
+    # predManObj.overSample()
 
     # predManObj.component_correlation()
 
     # predManObj.decisionTree_classifier()
 
-    # predManObj.weibullDist()
+    predManObj.weibullDist()
 
     # predManObj.vibration_footprint_matrix()
