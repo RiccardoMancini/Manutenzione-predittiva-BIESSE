@@ -155,9 +155,10 @@ class PredManClass:
         matpvalue = matpvalue.transpose()
 
         matpvalue.to_excel("dist.xlsx", sheet_name='Euclidean_dist')
-        print(matpvalue.head(), matpvalue.shape)
+        print(matpvalue.shape)
 
-        # filtraggio righe per media > 0.51 e mediana > 0.57
+        matpvalue = matpvalue.drop(matpvalue[(matpvalue.mean() > 0.51) & (matpvalue.median() > 0.57)])
+        print(matpvalue.shape)
         # vibration_al = vibration_al[vibration_al.index.isin(matpvalue.index)]
         # concatenazione vibration_al e de
 
