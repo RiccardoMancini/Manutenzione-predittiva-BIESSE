@@ -122,37 +122,44 @@ class PredManClass:
 
         vibration_de = self.vib_foot[self.vib_foot['classe'] == 3].iloc[:, 1:]\
             .drop(['Ore_lav_totali'], axis=1)
-        print(vibration_de.shape, vibration_de.head())
+        print('N° sample before oversampling: ', vibration_de.shape)
 
         df_res = oversample_with_gaussian_noise(vibration_de, 20)
-
         df_res['total'] = df_res[list(df_res.columns[1:])].sum(axis=1)
-        print(df_res.head(), df_res.shape)
+        print('N° sample after oversampling: ', df_res.shape)
+
         df_res.to_excel('overS.xlsx')
+
         return df_res
 
     def component_correlation(self):
-        vibration_al = self.vib_foot[self.vib_foot['classe'] != 3].iloc[:, 13:]
-        vibration_de = self.vib_foot[self.vib_foot['classe'] == 3].iloc[:, 13:]
+        vibration_al = self.vib_foot[self.vib_foot['classe'] != 3].reset_index().drop(['index'],axis=1)
+        vibration_de = self.vib_foot[self.vib_foot['classe'] == 3].reset_index().drop(['index'],axis=1)
 
-        # print(vibration_de.head(), vibration_al.head())
-        print(vibration_de.shape, vibration_al.shape)
+        al = vibration_al.iloc[:, 3:]
+        de = vibration_de.iloc[:, 3:]
+
+        print(vibration_de.head(), de.head())
+        #print(vibration_de.shape, vibration_al.shape)
 
         corMat = []
         c = []
-        for i in range(0, vibration_de.shape[0]):
-            for j in range(0, vibration_al.shape[0]):
-                corMat.append(np.linalg.norm(vibration_al.iloc[j] - vibration_de.iloc[i]))
+        for i in range(0, de.shape[0]):
+            for j in range(0, al.shape[0]):
+                corMat.append(np.linalg.norm(al.iloc[j] - de.iloc[i]))
             c.append(corMat)
             corMat = []
 
         matpvalue = pd.DataFrame(c)
         matpvalue = (matpvalue - matpvalue.min()) / (matpvalue.max() - matpvalue.min())
+        matpvalue = matpvalue.transpose()
+
+        matpvalue.to_excel("dist.xlsx", sheet_name='Euclidean_dist')
         print(matpvalue.head(), matpvalue.shape)
 
-        matpvalue.transpose().to_excel("dist.xlsx", sheet_name='Euclidean_dist')
-
-        # print(Counter(matpvalue.idxmax().tolist()))
+        # filtraggio righe per media > 0.51 e mediana > 0.57
+        # vibration_al = vibration_al[vibration_al.index.isin(matpvalue.index)]
+        # concatenazione vibration_al e de
 
     def decisionTree_classifier(self):
         # rimuoviamo temporaneamente il campione della classe con un solo campione
@@ -210,12 +217,31 @@ class PredManClass:
         #df = (df - df.min()) / (df.max() - df.min())
         df['total'] = total'''
 
+        # fail data
         df = self.overSample().reset_index(drop=True)
-        total = df['total']
-        df = df.iloc[:, :20]
-        df = (df - df.min()) / (df.max() - df.min())
-        df['total'] = total
+        total_fail = df['total']
+        df = df.iloc[:, :10]
+
+        # no-fail data
+        test_data = self.vib_foot[self.vib_foot['classe'] != 3].iloc[:, 1:12]
+        total_no_fail = test_data['Ore_lav_totali']
+        test_data = test_data.drop(['Ore_lav_totali'], axis=1)
+        test_data = test_data.iloc[:, :10]
+
+        # calcolare il minimo e il massimo dei due dataframe uniti
+        min_val = pd.concat([df, test_data], axis=0).min()
+        max_val = pd.concat([df, test_data], axis=0).max()
+
+        # normalizzare i dataframe utilizzando il minimo e il massimo dei due dataframe uniti
+        df = (df - min_val) / (max_val - min_val)
+        test_data = (test_data - min_val) / (max_val - min_val)
+
+        test_data['total'] = total_no_fail
+        df['total'] = total_fail
+
         print(df.head())
+        print(test_data.head())
+
         '''
         # Instantiate each fitter
         wb = WeibullFitter()
@@ -228,12 +254,9 @@ class PredManClass:
             # Print AIC
             print("The AIC value for", model.__class__.__name__, "is", model.AIC_)'''
 
+
         # FIRST IMPLEMENTATION
         weibull_aft = WeibullAFTFitter()
-        #scores = k_fold_cross_validation(weibull_aft, df, 'Ore_lav_totali', event_col='fail', k=5,
-        #                                 scoring_method="concordance_index")
-        #print(scores)
-
         weibull_aft.fit(df, duration_col='total')
         # weibull_aft.print_summary(3)
 
@@ -247,18 +270,7 @@ class PredManClass:
 
 
 
-        new_data = pd.DataFrame({
-            'deltaDateHour': [0.1],
-            '[0.0-0.5)': [0.057458],
-            '[0.5-1.5)': [0.242222],
-            '[1.5-2.5)': [0.939437],
-            '[2.5-3.5)': [0.857859],
-            '[3.5-4.5)': [0.961374],
-            '[4.5-5.5)': [0.965228],
-            '[5.5-6.5)': [0.847450],
-            '[6.5-7.5)': [0.464702],
-            '[7.5-8.5)': [0.216032]
-        })
+        new_data = test_data.iloc[[1]].drop(['total'], axis=1)
 
         predicted_expectation = weibull_aft.predict_expectation(new_data)
         print(predicted_expectation)
@@ -266,30 +278,29 @@ class PredManClass:
         # prendo la baseline, quindi un comportamento medio
         n = df.mean()
         #n['Ore_lav_totali'] = 1000
-        sf = weibull_aft.predict_survival_function(new_data.append(n, ignore_index=True))
-        sf.plot()
-        plt.title('Funzione di sopravvivenza stimata')
-        plt.xlabel('Tempo (ore)')
-        plt.xlim([0, 700])
-        plt.ylabel('Probabilità di sopravvivenza')
-        plt.show()
-
-        sf = weibull_aft.predict_hazard(new_data)
+        sf = weibull_aft.predict_survival_function(new_data)
         sf.plot()
         plt.title('Funzione di sopravvivenza stimata')
         plt.xlabel('Tempo (ore)')
         plt.ylabel('Probabilità di sopravvivenza')
         plt.show()
 
+        hz = weibull_aft.predict_hazard(new_data)
+        hz.plot()
+        plt.title('Funzione di rischio stimata')
+        plt.xlabel('Tempo (ore)')
+        plt.ylabel('Funzione di hazard')
+        plt.show()
 
-        '''
+
+
         # Converti l'indice in un array numpy e seleziona l'indice del valore più vicino a 1000 ore
-        time_of_work = 1000
+        time_of_work = 455
         time_idx = np.abs(sf.index.to_numpy() - time_of_work).argmin()
         # print(time_idx)
         # Seleziona la probabilità di sopravvivenza corrispondente all'indice trovato
         prob_sopravvivenza = sf.iloc[time_idx, 0]
-        print(f"Probabilità di sopravvivenza: {prob_sopravvivenza:.2%}")'''
+        print(f"Probabilità di sopravvivenza: {prob_sopravvivenza:.2%}")
 
 
         # SECOND IMPLEMENTATION
@@ -359,10 +370,10 @@ if __name__ == "__main__":
 
     # predManObj.overSample()
 
-    # predManObj.component_correlation()
+    predManObj.component_correlation()
 
     # predManObj.decisionTree_classifier()
 
-    predManObj.weibullDist()
+    # predManObj.weibullDist()
 
     # predManObj.vibration_footprint_matrix()
