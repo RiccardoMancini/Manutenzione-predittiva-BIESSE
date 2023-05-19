@@ -69,7 +69,21 @@ class PredManClass:
                                             'Perc ore lav', 'Lav mancanti', 'Perc lav manc',
                                             'Ore lav manc', 'Perc ore manc'], axis=1)
 
-        # print(self.vib_foot.shape, self.vib_foot.head())
+    def feature_subset(self):
+        df_filt = self.vib_foot[self.vib_foot['classe'] == 3]
+
+        dfr = df_filt.drop(['classe'], axis=1)
+        print(dfr.head(), dfr.shape)
+
+        # compute pearson's r
+        target_correlation = dfr.corr()[['Ore_lav_totali']]
+        target = target_correlation.drop('Ore_lav_totali')
+        valfin = target[abs(target) > 0.5].dropna()
+
+        # val1 = valfin.sort_values('Ore_lav_totali',ascending=False)
+        plt.figure(figsize=(7, 5))
+        sns.heatmap(valfin, annot=True, cmap=plt.cm.Reds)
+        plt.show()
 
     def overSample(self):
 
@@ -133,15 +147,12 @@ class PredManClass:
         return df_res
 
     def component_correlation(self):
-        vibration_al = self.vib_foot[self.vib_foot['classe'] != 3].reset_index().drop(['index'],axis=1)
-        vibration_de = self.vib_foot[self.vib_foot['classe'] == 3].reset_index().drop(['index'],axis=1)
+        vibration_al = self.vib_foot[self.vib_foot['classe'] != 3].reset_index().drop(['index'], axis=1)
+        vibration_de = self.vib_foot[self.vib_foot['classe'] == 3].reset_index().drop(['index'], axis=1)
 
         al = vibration_al.iloc[:, 3:]
         de = vibration_de.iloc[:, 3:]
-
-        print(vibration_de.head(), de.head())
-        #print(vibration_de.shape, vibration_al.shape)
-
+        print(al.shape)
         corMat = []
         c = []
         for i in range(0, de.shape[0]):
@@ -153,14 +164,17 @@ class PredManClass:
         matpvalue = pd.DataFrame(c)
         matpvalue = (matpvalue - matpvalue.min()) / (matpvalue.max() - matpvalue.min())
         matpvalue = matpvalue.transpose()
+        #matpvalue.to_excel("dist.xlsx", sheet_name='Euclidean_dist')
 
-        matpvalue.to_excel("dist.xlsx", sheet_name='Euclidean_dist')
-        print(matpvalue.shape)
+        # prendo le righe con dist euclidea media di 0.5
+        matpvalue = matpvalue[(matpvalue.mean(axis=1) < 0.5)]
 
-        matpvalue = matpvalue.drop(matpvalue[(matpvalue.mean() > 0.51) & (matpvalue.median() > 0.57)])
-        print(matpvalue.shape)
-        # vibration_al = vibration_al[vibration_al.index.isin(matpvalue.index)]
-        # concatenazione vibration_al e de
+        # filtro i componenti no-fail che rispettano questa distanza
+        vibration_al = vibration_al[vibration_al.index.isin(matpvalue.index)]
+
+        # li riconcateno con quelli fail iniziali
+        result = pd.concat([vibration_al, vibration_de])
+        return result
 
     def decisionTree_classifier(self):
         # rimuoviamo temporaneamente il campione della classe con un solo campione
@@ -368,6 +382,8 @@ if __name__ == "__main__":
     predManObj = PredManClass()
 
     # predManObj.some_stats()
+
+    # predManObj.feature_subset()
 
     # predManObj.overSample()
 
