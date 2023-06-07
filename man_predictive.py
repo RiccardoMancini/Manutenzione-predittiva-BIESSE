@@ -75,15 +75,17 @@ class PredManClass:
         dfr = df_filt.drop(['classe'], axis=1)
         print(dfr.head(), dfr.shape)
 
-        # compute pearson's r
+        # compute pearson's
         target_correlation = dfr.corr()[['Ore_lav_totali']]
         target = target_correlation.drop('Ore_lav_totali')
         valfin = target[abs(target) > 0.5].dropna()
+        # print(valfin, self.vib_foot.head())
 
         # val1 = valfin.sort_values('Ore_lav_totali',ascending=False)
-        plt.figure(figsize=(7, 5))
+        '''plt.figure(figsize=(7, 5))
         sns.heatmap(valfin, annot=True, cmap=plt.cm.Reds)
-        plt.show()
+        plt.show()'''
+        return valfin
 
     def overSample(self):
 
@@ -134,17 +136,39 @@ class PredManClass:
 
             return oversampled_data
 
-        vibration_de = self.vib_foot[self.vib_foot['classe'] == 3].iloc[:, 1:]\
-            .drop(['Ore_lav_totali'], axis=1)
+        df = self.component_correlation()
+        vibration_de = df[df['classe'] == 3].iloc[:, 1:].drop(['Ore_lav_totali'], axis=1)
         print('N° sample before oversampling: ', vibration_de.shape)
 
-        df_res = oversample_with_gaussian_noise(vibration_de, 20)
+        df_res = oversample_with_gaussian_noise(vibration_de, 15)
         df_res['total'] = df_res[list(df_res.columns[1:])].sum(axis=1)
+        df_res['classe'] = 3
         print('N° sample after oversampling: ', df_res.shape)
 
-        df_res.to_excel('overS.xlsx')
+        vibration_al = df[df['classe'] == 5]
+        vibration_al['total'] = vibration_al['Ore_lav_totali']
+        vibration_al = vibration_al.drop(['Ore_lav_totali'], axis=1)
 
-        return df_res
+        result = pd.concat([vibration_al, df_res])
+        print(result.head(), result.shape)
+        result.to_excel('overS.xlsx')
+
+        return result
+
+    def reduce_n_range(self):
+        feature = self.feature_subset()
+        df = self.overSample()
+
+        print(feature.index.values.tolist())
+        print(df.shape)
+
+        col = [x for x in feature.index.values.tolist()]
+        for x in ['total', 'deltaDateHour', 'classe']:
+            col.append(x)
+        dfN = df[df.columns.intersection(col)]
+        print(dfN.shape, dfN.head())
+
+        dfN.to_excel('Dataset.xlsx')
 
     def component_correlation(self):
         vibration_al = self.vib_foot[self.vib_foot['classe'] != 3].reset_index().drop(['index'], axis=1)
@@ -166,14 +190,15 @@ class PredManClass:
         matpvalue = matpvalue.transpose()
         #matpvalue.to_excel("dist.xlsx", sheet_name='Euclidean_dist')
 
-        # prendo le righe con dist euclidea media di 0.5
+        # prendo le righe con dist euclidea media minore di 0.5
         matpvalue = matpvalue[(matpvalue.mean(axis=1) < 0.5)]
 
-        # filtro i componenti no-fail che rispettano questa distanza
+        # filtro i componenti no-fail che ricadono in questa distanza
         vibration_al = vibration_al[vibration_al.index.isin(matpvalue.index)]
 
-        # li riconcateno con quelli fail iniziali
+        # li ri-concateno con quelli fail iniziali
         result = pd.concat([vibration_al, vibration_de])
+        print(result.head(), result.shape)
         return result
 
     def decisionTree_classifier(self):
@@ -342,20 +367,6 @@ class PredManClass:
         plt.title('Distribuzione di Weibull')
         plt.show()
 
-    def reduce_n_range(self):
-        df = self.vib_foot
-        c = 0
-        for i in range(6):
-            end = 19 if i != 5 else 20
-            # print(df.columns[9:end])
-            c = c + 10 if i != 0 else float(i) + 9.5
-            df[f'[{float(i) if i == 0 else c - 10}-{c if i != 5 else c + 1})'] = df.iloc[:, 9:end].sum(axis=1)
-            df = df.drop(df.columns[9:end], axis=1)
-
-        # conversione secondi in ore
-        df.iloc[:, 9:16] = df.iloc[:, 9:16].apply(lambda x: x / 3600, axis=0)
-        return df
-
     def vibration_footprint_matrix(self):
         df = self.reduce_n_range().iloc[:, 9:16]
 
@@ -387,10 +398,10 @@ if __name__ == "__main__":
 
     # predManObj.overSample()
 
-    predManObj.component_correlation()
+    # predManObj.component_correlation()
 
     # predManObj.decisionTree_classifier()
 
     # predManObj.weibullDist()
 
-    # predManObj.vibration_footprint_matrix()
+    predManObj.reduce_n_range()
