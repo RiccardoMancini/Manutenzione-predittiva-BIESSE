@@ -251,36 +251,20 @@ class PredManClass:
 
     def weibullDist(self):
 
-        '''df = self.vib_foot[self.vib_foot['classe'] == 3].iloc[:, 1:8]
-        total = df['Ore_lav_totali']
-        df = df.drop(['Ore_lav_totali'], axis=1)
-        #df = (df - df.min()) / (df.max() - df.min())
-        df['total'] = total'''
+        # load data
+        df = pd.read_excel('Dataset.xlsx', sheet_name='Sheet1').drop(['Unnamed: 0'], axis=1)
+        target = df['total']
+        df = df.drop(['total'], axis=1)
 
-        # fail data
-        df = self.overSample().reset_index(drop=True)
-        total_fail = df['total']
-        df = df.iloc[:, :10]
+        # normalizzare i dataframe
+        df = (df - df.min()) / (df.max() - df.min())
+        df['total'] = target
+        train, test = df[df['classe'] == 0].drop(['classe'], axis=1), df[df['classe'] == 1].drop(['classe'], axis=1)
 
-        # no-fail data
-        test_data = self.vib_foot[self.vib_foot['classe'] != 3].iloc[:, 1:12]
-        total_no_fail = test_data['Ore_lav_totali']
-        test_data = test_data.drop(['Ore_lav_totali'], axis=1)
-        test_data = test_data.iloc[:, :10]
+        print(train.head(), train.shape)
+        print(test.head(), test.shape)
 
-        # calcolare il minimo e il massimo dei due dataframe uniti
-        min_val = pd.concat([df, test_data], axis=0).min()
-        max_val = pd.concat([df, test_data], axis=0).max()
 
-        # normalizzare i dataframe utilizzando il minimo e il massimo dei due dataframe uniti
-        df = (df - min_val) / (max_val - min_val)
-        test_data = (test_data - min_val) / (max_val - min_val)
-
-        test_data['total'] = total_no_fail
-        df['total'] = total_fail
-
-        print(df.head())
-        print(test_data.head())
 
         '''
         # Instantiate each fitter
@@ -297,7 +281,7 @@ class PredManClass:
 
         # FIRST IMPLEMENTATION
         weibull_aft = WeibullAFTFitter()
-        weibull_aft.fit(df, duration_col='total')
+        weibull_aft.fit(train, duration_col='total')
         # weibull_aft.print_summary(3)
 
         scale = np.exp(weibull_aft.params_['lambda_']['Intercept'])
@@ -306,11 +290,13 @@ class PredManClass:
 
         print(weibull_aft.median_survival_time_)
         print(weibull_aft.mean_survival_time_)
+        #print(weibull_aft.confidence_intervals_)
 
 
 
 
-        new_data = test_data.iloc[[1]].drop(['total'], axis=1)
+        new_data = test.iloc[[4]].drop(['total'], axis=1)
+        print(new_data)
 
         predicted_expectation = weibull_aft.predict_expectation(new_data)
         print(predicted_expectation)
@@ -319,6 +305,7 @@ class PredManClass:
         n = df.mean()
         #n['Ore_lav_totali'] = 1000
         sf = weibull_aft.predict_survival_function(new_data)
+
         sf.plot()
         plt.title('Funzione di sopravvivenza stimata')
         plt.xlabel('Tempo (ore)')
@@ -333,14 +320,17 @@ class PredManClass:
         plt.show()
 
 
-
+        '''
         # Converti l'indice in un array numpy e seleziona l'indice del valore più vicino a 1000 ore
         time_of_work = 455
         time_idx = np.abs(sf.index.to_numpy() - time_of_work).argmin()
         # print(time_idx)
         # Seleziona la probabilità di sopravvivenza corrispondente all'indice trovato
         prob_sopravvivenza = sf.iloc[time_idx, 0]
-        print(f"Probabilità di sopravvivenza: {prob_sopravvivenza:.2%}")
+        print(f"Probabilità di sopravvivenza: {prob_sopravvivenza:.2%}")'''
+
+
+
 
 
         # SECOND IMPLEMENTATION
@@ -350,11 +340,12 @@ class PredManClass:
         shape = wf.rho_
         print(shape, scale)'''
 
-
-
         # THIRD IMPLEMENTATION
         '''shape, _, scale = weibull_min.fit(df['total'], floc=0)
         print(shape, scale)'''
+
+
+
 
         # Calcola la distribuzione di Weibull con i parametri shape, loc e scale
         x = np.linspace(0, 200, 200)
@@ -365,27 +356,6 @@ class PredManClass:
         plt.xlabel('Tempo di vita (ore)')
         plt.ylabel('Densità di probabilità')
         plt.title('Distribuzione di Weibull')
-        plt.show()
-
-    def vibration_footprint_matrix(self):
-        df = self.reduce_n_range().iloc[:, 9:16]
-
-        vibration_ranges = df.columns.values.tolist()
-        vibration_sums = df.sum(axis=0).round(3).to_numpy()
-        print(df.sum(axis=0))
-
-        # creazione grafico
-        norm = plt.Normalize(vmin=vibration_sums.min(), vmax=vibration_sums.max())
-        plt.imshow(vibration_sums[:, np.newaxis].T, cmap='Reds', norm=norm)
-        plt.colorbar()
-        plt.title('Ore trascorse in ogni range')
-        plt.xticks(np.arange(len(vibration_ranges)), vibration_ranges, fontsize=8, rotation=45)
-        plt.yticks([])
-        plt.tight_layout()
-        # aggiungo i numeri all'interno dei quadranti del vettore
-        for i in range(len(vibration_ranges)):
-            text = plt.text(i, 0, vibration_sums[i], ha="center", va="center", color="black", fontsize=10)
-
         plt.show()
 
 
@@ -402,6 +372,6 @@ if __name__ == "__main__":
 
     # predManObj.decisionTree_classifier()
 
-    # predManObj.weibullDist()
+    predManObj.weibullDist()
 
-    predManObj.reduce_n_range()
+    # predManObj.reduce_n_range()
