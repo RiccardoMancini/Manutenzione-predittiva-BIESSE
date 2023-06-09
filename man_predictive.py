@@ -18,6 +18,8 @@ from lifelines import WeibullFitter, WeibullAFTFitter, KaplanMeierFitter, Expone
 from lifelines.utils import k_fold_cross_validation, median_survival_times
 from collections import Counter
 import datetime as dt
+import warnings
+warnings.filterwarnings("ignore")
 
 
 class PredManClass:
@@ -27,14 +29,12 @@ class PredManClass:
         self.pre_process()
 
     def some_stats(self):
-        df = self.vib_foot
-        v = self.vib_foot['classe'].value_counts()
-        print('N° sample x classe:')
-        print(v)
+        df = pd.read_excel('Dataset.xlsx', sheet_name='Sheet1').drop(['Unnamed: 0'], axis=1)
+        train, test = df[df['classe'] == 3].drop(['classe'], axis=1), df[df['classe'] == 5].drop(['classe'], axis=1)
 
-        col = 'Ore_lav_totali'
+        col = 'total'
         # Istogramma
-        sns.histplot(data=df, x=col, bins=50, kde=True, alpha=0.5)
+        sns.histplot(data=train, x=col, bins=50, kde=True, alpha=0.5)
         plt.xlabel('Valori')
         plt.ylabel('Frequenza')
         plt.title('Istogramma dei dati')
@@ -42,7 +42,7 @@ class PredManClass:
 
         # Some visualization...
         kmf = KaplanMeierFitter()
-        kmf.fit(durations=df[col])
+        kmf.fit(durations=train[col])
         kmf.plot_survival_function()
         plt.show()
         kmf.plot_cumulative_density()
@@ -256,14 +256,17 @@ class PredManClass:
         target = df['total']
         df = df.drop(['total'], axis=1)
 
+        '''df = self.vib_foot
+        target = df['Ore_lav_totali']
+        df = df.drop(['Ore_lav_totali'], axis=1)'''
+
+
         # normalizzare i dataframe
         df = (df - df.min()) / (df.max() - df.min())
         df['total'] = target
         train, test = df[df['classe'] == 0].drop(['classe'], axis=1), df[df['classe'] == 1].drop(['classe'], axis=1)
 
-        print(train.head(), train.shape)
-        print(test.head(), test.shape)
-
+        x_test, y_test = test.drop(['total'], axis=1), test['total']
 
 
         '''
@@ -282,7 +285,7 @@ class PredManClass:
         # FIRST IMPLEMENTATION
         weibull_aft = WeibullAFTFitter()
         weibull_aft.fit(train, duration_col='total')
-        # weibull_aft.print_summary(3)
+        # weibull_aft.print_summary()
 
         scale = np.exp(weibull_aft.params_['lambda_']['Intercept'])
         shape = np.exp(weibull_aft.params_['rho_']['Intercept'])
@@ -290,12 +293,19 @@ class PredManClass:
 
         print(weibull_aft.median_survival_time_)
         print(weibull_aft.mean_survival_time_)
-        #print(weibull_aft.confidence_intervals_)
+        # print(weibull_aft.confidence_intervals_)
 
+        predictions = []
+        for i, t in x_test.iterrows():
+            #print(i, t)
+            predict = weibull_aft.predict_expectation(x_test.iloc[[i]])
+            predictions.append(predict.item())
 
+        data = {'Predizione': predictions, 'Test': y_test.tolist()}
+        confronto = pd.DataFrame(data)
+        confronto.to_excel('compareWeibullDist.xlsx')
 
-
-        new_data = test.iloc[[4]].drop(['total'], axis=1)
+        '''new_data = test.iloc[[x]].drop(['total'], axis=1)
         print(new_data)
 
         predicted_expectation = weibull_aft.predict_expectation(new_data)
@@ -305,7 +315,6 @@ class PredManClass:
         n = df.mean()
         #n['Ore_lav_totali'] = 1000
         sf = weibull_aft.predict_survival_function(new_data)
-
         sf.plot()
         plt.title('Funzione di sopravvivenza stimata')
         plt.xlabel('Tempo (ore)')
@@ -317,7 +326,7 @@ class PredManClass:
         plt.title('Funzione di rischio stimata')
         plt.xlabel('Tempo (ore)')
         plt.ylabel('Funzione di hazard')
-        plt.show()
+        plt.show()'''
 
 
         '''
@@ -335,10 +344,12 @@ class PredManClass:
 
         # SECOND IMPLEMENTATION
         '''wf = WeibullFitter()
-        wf.fit(df['total'])
+        wf.fit(train['total'])
         scale = wf.lambda_
         shape = wf.rho_
-        print(shape, scale)'''
+        print(shape, scale)
+        wf.survival_function_.plot()
+        plt.show()'''
 
         # THIRD IMPLEMENTATION
         '''shape, _, scale = weibull_min.fit(df['total'], floc=0)
@@ -348,7 +359,7 @@ class PredManClass:
 
 
         # Calcola la distribuzione di Weibull con i parametri shape, loc e scale
-        x = np.linspace(0, 200, 200)
+        '''x = np.linspace(0, 200, 200)
         pdf = weibull_min.pdf(x, shape, scale=scale)
 
         # Grafica la distribuzione di Weibull
@@ -356,7 +367,7 @@ class PredManClass:
         plt.xlabel('Tempo di vita (ore)')
         plt.ylabel('Densità di probabilità')
         plt.title('Distribuzione di Weibull')
-        plt.show()
+        plt.show()'''
 
 
 if __name__ == "__main__":
