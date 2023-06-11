@@ -187,35 +187,6 @@ class PredManClass:
 
         dfN.to_excel('reduce_dimension.xlsx')
 
-
-
-    def discretize_columns(self, dataframe, columns, num_bins=4):
-        """
-        Discretizza le colonne continue del dataframe in base ai valori che assumono,
-        utilizzando il minimo e il massimo globale tra le colonne specificate.
-
-        Parametri:
-        - dataframe: il dataframe contenente i dati da discretizzare
-        - columns: una lista delle colonne da discretizzare
-        - num_bins: il numero di fasce in cui discretizzare i dati (default: 4)
-
-        Ritorna:
-        - dataframe: il dataframe con le colonne discretizzate
-        """
-
-        # Calcola il minimo e il massimo globali tra le colonne specificate
-        global_min = dataframe[columns].min().min()
-        global_max = dataframe[columns].max().max()
-
-        for column in columns:
-            # Calcola gli intervalli per la discretizzazione utilizzando il minimo e il massimo globali
-            bins = np.linspace(global_min, global_max, num_bins + 1)
-
-            # Discretizza la colonna
-            dataframe[column + '_discretized'] = pd.cut(dataframe[column], bins=bins, labels=False, include_lowest=True)
-
-        return dataframe
-
     def component_correlation(self):
         vibration_al = self.vib_foot[self.vib_foot['classe'] != 3].reset_index().drop(['index'], axis=1)
         vibration_de = self.vib_foot[self.vib_foot['classe'] == 3].reset_index().drop(['index'], axis=1)
@@ -294,6 +265,20 @@ class PredManClass:
         feature_importances = pd.Series(dTree.feature_importances_, index=X_train.columns)
         feature_importances.nlargest(10).plot(kind='barh', fontsize=6)
         plt.show()
+
+    def discretize_columns(self, dataframe, columns, bin_width=24):
+        # Calcola il minimo e il massimo globali tra le colonne specificate
+        global_min = dataframe[columns].min().min()
+        global_max = dataframe[columns].max().max()
+
+        for column in columns:
+            # Calcola gli intervalli per la discretizzazione
+            bins = np.arange(global_min, global_max + bin_width, bin_width)
+            #print(bins)
+            # Discretizza la colonna
+            dataframe[column] = pd.cut(dataframe[column], bins=bins, labels=False, include_lowest=True)
+
+        return dataframe
 
     def weibullDist(self):
         # load data
@@ -399,35 +384,69 @@ class PredManClass:
 
     def SVM(self):
         # load data
-        df = pd.read_excel('reduce_dimension.xlsx', sheet_name='Sheet1').drop(['Unnamed: 0'], axis=1)
-        target = df['total']
-        df = df.drop(['total'], axis=1)
+        dfT = pd.read_excel('reduce_dimension.xlsx', sheet_name='Sheet1').drop(['Unnamed: 0'], axis=1)
+        target = dfT['total']
+        dfT = dfT.drop(['total'], axis=1)
 
-        print(df.head())
+        print(dfT.head())
 
-        # normalizzare i dataframe
-        df = (df - df.min()) / (df.max() - df.min())
-        df['total'] = target
-        train, test = df[df['classe'] == 0].drop(['classe'], axis=1), df[df['classe'] == 1].drop(['classe'], axis=1)
+        bin_widths = [12]
+        for bin in bin_widths:
+            app = dfT.iloc[:, :7]
 
-        x_train, y_train = train.drop(['total'], axis=1), train['total']
-        x_test, y_test = test.drop(['total'], axis=1), test['total']
+            print(app.head())
 
-        param = {'kernel': ('linear', 'poly', 'rbf', 'sigmoid'), 'C': [1, 5, 10], 'degree': [3, 8],
-                 'coef0': [0.01, 10, 0.5], 'gamma': ('auto', 'scale')}
+            df = self.discretize_columns(app, app.columns, bin)
+            df['deltaDateHour'], df['classe'] = dfT['deltaDateHour'], dfT['classe']
+            df.to_excel('./grid_results/discr' + str(bin) + '.xlsx')
 
-        model = SVR()
-        svr_cv_modelgen = GridSearchCV(model, param, cv=5)
-        svr_tuned_gen = svr_cv_modelgen.fit(x_train, y_train)
+            # normalizzare i dataframe
+            df = (df - df.min()) / (df.max() - df.min())
+            df['total'] = target
+            train, test = df[df['classe'] == 0].drop(['classe'], axis=1), df[df['classe'] == 1].drop(['classe'], axis=1)
 
-        print(svr_tuned_gen.best_params_)
+            x_train, y_train = train.drop(['total'], axis=1), train['total']
+            x_test, y_test = test.drop(['total'], axis=1), test['total']
 
-        y_pred_gen = list(svr_tuned_gen.predict(x_test))
+            param = {'kernel': ('linear', 'poly'), 'C': [10], 'degree': [3, 8],
+                     'coef0': [0.01, 10, 0.5], 'gamma': ('auto', 'scale')}
 
-        data = {'Predizione': y_pred_gen, 'Reale': y_test}
-        confronto = pd.DataFrame(data)
-        confronto.to_excel('comparationSVM.xlsx')
+            model = SVR()
+            gridModel = GridSearchCV(model, param, cv=5)
 
+            tunedModel = gridModel.fit(x_train, y_train)
+
+            # Previsioni sui dati di test per ogni modello generato
+            residuals = []
+            for i in range(len(gridModel.cv_results_['params'])):
+                model = SVR(**gridModel.cv_results_['params'][i])
+                model.fit(x_train, y_train)
+                y_pred = model.predict(x_test)
+                residuals.append(y_test - y_pred)
+
+            # Calcolo del valore assoluto dei residui per ogni modello
+            absolute_errors = [np.mean(np.abs(res)) for res in residuals]
+
+            # Individuazione degli indici dei modelli con i residui più grandi
+            indices_of_outliers = np.argsort(absolute_errors)[-10:]
+            #print(indices_of_outliers)
+
+            # Stampa dei modelli con i residui più grandi
+            for i, index in enumerate(indices_of_outliers):
+                print("Modello con residuo elevato:")
+                params = gridModel.cv_results_['params'][index]
+                print("Parametri: ", params)
+                print("Miglior score (R2): ", gridModel.cv_results_['mean_test_score'][index])
+                #print("Residuo: ", residuals[index])
+                print("---------------------------------")
+
+                model = SVR(**params)
+                model.fit(x_train, y_train)
+                y_pred_gen = list(model.predict(x_test))
+
+                data = {'Predizione': y_pred_gen, 'Reale': y_test}
+                confronto = pd.DataFrame(data)
+                confronto.to_excel('./grid_results/comparationSVM_discr' + str(bin) + '_' + str(i) + '.xlsx')
 
 
 if __name__ == "__main__":
