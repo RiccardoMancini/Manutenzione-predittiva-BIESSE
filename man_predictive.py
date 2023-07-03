@@ -390,7 +390,7 @@ class PredManClass:
 
         print(dfT.head())
 
-        bin_widths = [12]
+        bin_widths = [12, 24, 48]
         for bin in bin_widths:
             app = dfT.iloc[:, :7]
 
@@ -408,7 +408,7 @@ class PredManClass:
             x_train, y_train = train.drop(['total'], axis=1), train['total']
             x_test, y_test = test.drop(['total'], axis=1), test['total']
 
-            param = {'kernel': ('linear', 'poly'), 'C': [10], 'degree': [3, 8],
+            param = {'kernel': ('linear', 'poly'), 'C': [10, 5], 'degree': [3, 8],
                      'coef0': [0.01, 10, 0.5], 'gamma': ('auto', 'scale')}
 
             model = SVR()
@@ -428,7 +428,7 @@ class PredManClass:
             absolute_errors = [np.mean(np.abs(res)) for res in residuals]
 
             # Individuazione degli indici dei modelli con i residui più grandi
-            indices_of_outliers = np.argsort(absolute_errors)[-10:]
+            indices_of_outliers = np.argsort(absolute_errors)[-2:]
             #print(indices_of_outliers)
 
             # Stampa dei modelli con i residui più grandi
