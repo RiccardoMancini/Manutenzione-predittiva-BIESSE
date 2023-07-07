@@ -6,7 +6,7 @@ import matplotlib.pyplot as plt
 import matplotlib.colors as mcolors
 from scipy import stats
 from sklearn import tree
-from sklearn.model_selection import train_test_split,cross_val_score,cross_val_predict,ShuffleSplit,GridSearchCV
+from sklearn.model_selection import train_test_split, cross_val_score, cross_val_predict, ShuffleSplit, GridSearchCV
 from sklearn import metrics
 from sklearn.utils import resample
 from sklearn.neighbors import NearestNeighbors
@@ -20,6 +20,7 @@ from lifelines.utils import k_fold_cross_validation, median_survival_times
 from collections import Counter
 import datetime as dt
 import warnings
+
 warnings.filterwarnings("ignore")
 
 
@@ -116,7 +117,8 @@ class PredManClass:
             stds = data.std()
 
             # Generazione di rumore gaussiano con deviazioni standard proporzionali
-            noise = np.clip(np.random.normal(0, stds*noise_ratio, size=(n_samples, len(data.columns))), a_min=0, a_max=None)
+            noise = np.clip(np.random.normal(0, stds * noise_ratio, size=(n_samples, len(data.columns))), a_min=0,
+                            a_max=None)
 
             # Ripetizione n_samples volte
             for i in range(n_samples):
@@ -205,7 +207,7 @@ class PredManClass:
         matpvalue = pd.DataFrame(c)
         matpvalue = (matpvalue - matpvalue.min()) / (matpvalue.max() - matpvalue.min())
         matpvalue = matpvalue.transpose()
-        #matpvalue.to_excel("dist.xlsx", sheet_name='Euclidean_dist')
+        # matpvalue.to_excel("dist.xlsx", sheet_name='Euclidean_dist')
 
         # prendo le righe con dist euclidea media minore di 0.5
         matpvalue = matpvalue[(matpvalue.mean(axis=1) < 0.5)]
@@ -274,7 +276,7 @@ class PredManClass:
         for column in columns:
             # Calcola gli intervalli per la discretizzazione
             bins = np.arange(global_min, global_max + bin_width, bin_width)
-            #print(bins)
+            # print(bins)
             # Discretizza la colonna
             dataframe[column] = pd.cut(dataframe[column], bins=bins, labels=False, include_lowest=True)
 
@@ -311,16 +313,17 @@ class PredManClass:
         predictions = []
         probability = []
         for i, t in x_test.iterrows():
-            #print(i, t)
+            # print(i, t)
             predict = weibull_aft.predict_expectation(x_test.iloc[[i]])
             predictions.append(predict.item())
 
             sf = weibull_aft.predict_survival_function(x_test.iloc[[i]])
             time_of_work = y_test.iloc[[i]].item()
+            # TODO: il valore assoluto è probabilmente il motivo per cui c'è una prob. non coerente con la previsione
             time_idx = np.abs(sf.index.to_numpy() - time_of_work).argmin()
+            print(time_idx)
             prob_sopravvivenza = sf.iloc[time_idx, 0]
             probability.append(prob_sopravvivenza)
-
 
         '''sf = weibull_aft.predict_survival_function(test.iloc[[11]])
         sf.plot()
@@ -331,7 +334,8 @@ class PredManClass:
 
         data = {'Predizione': predictions, 'Reale': y_test.tolist(), 'Prob. sopravvivenza': probability}
         confronto = pd.DataFrame(data)
-        confronto.to_excel('comparationWeibullDist.xlsx')
+        # confronto.to_excel('comparationWeibullDist.xlsx')
+        print(confronto.head())
 
         '''new_data = test.iloc[[x]].drop(['total'], axis=1)
         print(new_data)
@@ -369,10 +373,8 @@ class PredManClass:
         '''shape, _, scale = weibull_min.fit(df['total'], floc=0)
         print(shape, scale)'''
 
-
-
         # Calcola la distribuzione di Weibull con i parametri shape, loc e scale
-        x = np.linspace(0, 200, 200)
+        '''x = np.linspace(0, 200, 200)
         pdf = weibull_min.pdf(x, shape, scale=scale)
 
         # Grafica la distribuzione di Weibull
@@ -380,7 +382,7 @@ class PredManClass:
         plt.xlabel('Tempo di vita (ore)')
         plt.ylabel('Densità di probabilità')
         plt.title('Distribuzione di Weibull')
-        plt.show()
+        plt.show()'''
 
     def SVM(self):
         # load data
@@ -429,7 +431,7 @@ class PredManClass:
 
             # Individuazione degli indici dei modelli con i residui più grandi
             indices_of_outliers = np.argsort(absolute_errors)[-2:]
-            #print(indices_of_outliers)
+            # print(indices_of_outliers)
 
             # Stampa dei modelli con i residui più grandi
             for i, index in enumerate(indices_of_outliers):
@@ -437,7 +439,7 @@ class PredManClass:
                 params = gridModel.cv_results_['params'][index]
                 print("Parametri: ", params)
                 print("Miglior score (R2): ", gridModel.cv_results_['mean_test_score'][index])
-                #print("Residuo: ", residuals[index])
+                # print("Residuo: ", residuals[index])
                 print("---------------------------------")
 
                 model = SVR(**params)
@@ -464,8 +466,8 @@ if __name__ == "__main__":
 
     # predManObj.decisionTree_classifier()
 
-    # predManObj.weibullDist()
+    predManObj.weibullDist()
 
-    predManObj.SVM()
+    # predManObj.SVM()
 
     # predManObj.reduce_n_range()
