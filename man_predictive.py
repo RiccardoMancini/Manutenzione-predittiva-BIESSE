@@ -30,6 +30,22 @@ class PredManClass:
         self.vib_foot = pd.read_excel('VibrationFootprints.xlsx', sheet_name='VibrationFootprints')
         self.pre_process()
 
+    def pre_process(self):
+        # conversione in timestamp
+        self.vib_foot['startDate'] = self.vib_foot['startDate'].astype('int64') // 10 ** 9
+        self.vib_foot['endDate'] = self.vib_foot['endDate'].astype('int64') // 10 ** 9
+
+        # converti secondi in ore negli intervalli delle vibrazioni
+        self.vib_foot.iloc[:, 13:] = self.vib_foot.iloc[:, 13:].apply(lambda x: x / 3600, axis=0)
+
+        # aggiungi le ore mancanti
+        self.vib_foot['Ore_lav_totali'] = self.vib_foot['Ore_lav_totali'] + self.vib_foot['Ore lav manc']
+
+        # rimuovi colonne inutili
+        self.vib_foot = self.vib_foot.drop(['snMacchina', 'snEm', 'tp', 'startDate', 'endDate',
+                                            'Perc ore lav', 'Lav mancanti', 'Perc lav manc',
+                                            'Ore lav manc', 'Perc ore manc'], axis=1)
+
     def some_stats(self):
         df = pd.read_excel('Dataset.xlsx', sheet_name='Sheet1').drop(['Unnamed: 0'], axis=1)
         train, test = df[df['classe'] == 3].drop(['classe'], axis=1), df[df['classe'] == 5].drop(['classe'], axis=1)
@@ -54,22 +70,6 @@ class PredManClass:
         median_confidence_interval_ = median_survival_times(kmf.confidence_interval_)
         print(median_)
         print(median_confidence_interval_)
-
-    def pre_process(self):
-        # conversione in timestamp
-        self.vib_foot['startDate'] = self.vib_foot['startDate'].astype('int64') // 10 ** 9
-        self.vib_foot['endDate'] = self.vib_foot['endDate'].astype('int64') // 10 ** 9
-
-        # converti secondi in ore negli intervalli delle vibrazioni
-        self.vib_foot.iloc[:, 13:] = self.vib_foot.iloc[:, 13:].apply(lambda x: x / 3600, axis=0)
-
-        # aggiungi le ore mancanti
-        self.vib_foot['Ore_lav_totali'] = self.vib_foot['Ore_lav_totali'] + self.vib_foot['Ore lav manc']
-
-        # rimuovi colonne inutili
-        self.vib_foot = self.vib_foot.drop(['snMacchina', 'snEm', 'tp', 'startDate', 'endDate',
-                                            'Perc ore lav', 'Lav mancanti', 'Perc lav manc',
-                                            'Ore lav manc', 'Perc ore manc'], axis=1)
 
     def feature_subset(self):
         df_filt = self.vib_foot[self.vib_foot['classe'] == 3]
@@ -173,10 +173,10 @@ class PredManClass:
 
         dfN.to_excel('Dataset.xlsx')
 
-    def merge_columns(self):
-        df = self.overSample()
+    def merge_columns(self, df):
+        #df = self.overSample()
 
-        dfN = df.drop(['total', 'deltaDateHour', 'classe'], axis=1)
+        dfN = df.drop(['total', 'deltaDateHour', 'classe', 'ore_lav_rim'], axis=1)
         print(dfN.head())
 
         g1 = dfN.columns[6:11]
@@ -185,9 +185,10 @@ class PredManClass:
         red = dfN[g1].sum(axis=1)
 
         dfN, dfN['[5.5-10.5)'] = dfN.iloc[:, :6], red
-        dfN['deltaDateHour'], dfN['classe'], dfN['total'] = df['deltaDateHour'], df['classe'], df['total']
+        dfN['deltaDateHour'], dfN['classe'], dfN['total'], dfN['ore_lav_rim'] = \
+            df['deltaDateHour'], df['classe'], df['total'], df['ore_lav_rim']
 
-        dfN.to_excel('reduce_dimension.xlsx')
+        dfN.to_excel('reduce_dimensionNEW.xlsx')
 
     def component_correlation(self):
         vibration_al = self.vib_foot[self.vib_foot['classe'] != 3].reset_index().drop(['index'], axis=1)
@@ -282,6 +283,120 @@ class PredManClass:
 
         return dataframe
 
+    def get_new_data(self):
+        df = pd.read_csv('./VibrationFootprints_time/3_2020037085.csv')
+        df.rename(columns={'delta_date_hour': 'deltaDateHour', 'tempo_lav': 'total'}, inplace=True)
+        df['classe'] = 3
+        print(df.head())
+
+        df.iloc[:, 3:-1] = df.iloc[:, 3:-1].apply(lambda x: x / 3600, axis=0)
+        #self.vib_foot.iloc[:, 13:] = self.vib_foot.iloc[:, 13:].apply(lambda x: x / 3600, axis=0)
+        self.merge_columns(df)
+
+    def weibullDistNEW(self):
+        # load data
+        df = pd.read_excel('reduce_dimensionNEW.xlsx', sheet_name='Sheet1').drop(['Unnamed: 0'], axis=1)
+        target = df['ore_lav_rim']
+        df = df.drop(['ore_lav_rim'], axis=1)
+
+        print(df.head())
+
+        # normalizzare i dataframe
+        df = (df - df.min()) / (df.max() - df.min())
+        df['ore_lav_rim'] = target
+        train, test = df[df['classe'] == 0].drop(['classe'], axis=1), df[df['classe'] == 1].drop(['classe'], axis=1)
+
+        x_test, y_test = test.drop(['ore_lav_rim'], axis=1), test['ore_lav_rim']
+        #print(train.head(), test.head())
+
+        # FIRST IMPLEMENTATION
+        weibull_aft = WeibullAFTFitter()
+        weibull_aft.fit(train, duration_col='ore_lav_rim')
+        # weibull_aft.print_summary()
+
+        scale = np.exp(weibull_aft.params_['lambda_']['Intercept'])
+        shape = np.exp(weibull_aft.params_['rho_']['Intercept'])
+        print(shape, scale)
+
+        print(weibull_aft.median_survival_time_)
+        print(weibull_aft.mean_survival_time_)
+        # print(weibull_aft.confidence_intervals_)
+
+        predictions = []
+        probability = []
+        for i, t in x_test.iterrows():
+            print(i, t)
+            predict = weibull_aft.predict_expectation(x_test.iloc[[i]])
+            predictions.append(predict.item())
+
+            '''sf = weibull_aft.predict_survival_function(x_test.iloc[[i]])
+            time_of_work = y_test.iloc[[i]].item()
+            # TODO: il valore assoluto è probabilmente il motivo per cui c'è una prob. non coerente con la previsione
+            time_idx = np.abs(sf.index.to_numpy() - time_of_work).argmin()
+            print(time_idx)
+            prob_sopravvivenza = sf.iloc[time_idx, 0]
+            probability.append(prob_sopravvivenza)'''
+        print(predictions)
+        '''sf = weibull_aft.predict_survival_function(test.iloc[[11]])
+        sf.plot()
+        plt.title('Funzione di sopravvivenza stimata')
+        plt.xlabel('Tempo (ore)')
+        plt.ylabel('Probabilità di sopravvivenza')
+        plt.show()'''
+
+        '''data = {'Predizione': predictions, 'Reale': y_test.tolist(), 'Prob. sopravvivenza': probability}
+        confronto = pd.DataFrame(data)
+        # confronto.to_excel('comparationWeibullDist.xlsx')
+        print(confronto.head())'''
+
+        '''new_data = test.iloc[[x]].drop(['total'], axis=1)
+        print(new_data)
+
+        predicted_expectation = weibull_aft.predict_expectation(new_data)
+        print(predicted_expectation)
+
+        # prendo la baseline, quindi un comportamento medio
+        n = df.mean()
+        #n['Ore_lav_totali'] = 1000
+        sf = weibull_aft.predict_survival_function(new_data)
+        sf.plot()
+        plt.title('Funzione di sopravvivenza stimata')
+        plt.xlabel('Tempo (ore)')
+        plt.ylabel('Probabilità di sopravvivenza')
+        plt.show()
+
+        hz = weibull_aft.predict_hazard(new_data)
+        hz.plot()
+        plt.title('Funzione di rischio stimata')
+        plt.xlabel('Tempo (ore)')
+        plt.ylabel('Funzione di hazard')
+        plt.show()'''
+
+        # SECOND IMPLEMENTATION
+        '''wf = WeibullFitter()
+        wf.fit(train['total'])
+        scale = wf.lambda_
+        shape = wf.rho_
+        print(shape, scale)
+        wf.survival_function_.plot()
+        plt.show()'''
+
+        # THIRD IMPLEMENTATION
+        '''shape, _, scale = weibull_min.fit(df['total'], floc=0)
+        print(shape, scale)'''
+
+        # Calcola la distribuzione di Weibull con i parametri shape, loc e scale
+        '''x = np.linspace(0, 200, 200)
+        pdf = weibull_min.pdf(x, shape, scale=scale)
+
+        # Grafica la distribuzione di Weibull
+        plt.plot(x, pdf)
+        plt.xlabel('Tempo di vita (ore)')
+        plt.ylabel('Densità di probabilità')
+        plt.title('Distribuzione di Weibull')
+        plt.show()'''
+
+
     def weibullDist(self):
         # load data
         df = pd.read_excel('reduce_dimension.xlsx', sheet_name='Sheet1').drop(['Unnamed: 0'], axis=1)
@@ -313,7 +428,7 @@ class PredManClass:
         predictions = []
         probability = []
         for i, t in x_test.iterrows():
-            # print(i, t)
+            print(i, t)
             predict = weibull_aft.predict_expectation(x_test.iloc[[i]])
             predictions.append(predict.item())
 
@@ -466,7 +581,11 @@ if __name__ == "__main__":
 
     # predManObj.decisionTree_classifier()
 
-    predManObj.weibullDist()
+    #predManObj.weibullDist()
+
+    #predManObj.get_new_data()
+    predManObj.weibullDistNEW()
+
 
     # predManObj.SVM()
 
