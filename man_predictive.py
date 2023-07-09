@@ -1,3 +1,5 @@
+import os
+
 import numpy as np
 import pandas as pd
 import openpyxl
@@ -89,7 +91,7 @@ class PredManClass:
         plt.show()'''
         return valfin
 
-    def overSample(self):
+    def overSample(self, n_samples):
 
         def oversample_with_gaussian_noise(data, n_samples, noise_ratio=0.3):
             """
@@ -139,24 +141,16 @@ class PredManClass:
 
             return oversampled_data
 
-        df = self.component_correlation()
+        '''df = self.component_correlation()
         vibration_de = df[df['classe'] == 3].iloc[:, 1:].drop(['Ore_lav_totali'], axis=1)
-        print('N° sample before oversampling: ', vibration_de.shape)
+        print('N° sample before oversampling: ', vibration_de.shape)'''
 
-        df_res = oversample_with_gaussian_noise(vibration_de, 15)
-        df_res['total'] = df_res[list(df_res.columns[1:])].sum(axis=1)
-        df_res['classe'] = 3
+        df = pd.read_excel('reduce_dimensionNEW.xlsx', sheet_name='Sheet1').drop(['Unnamed: 0'], axis=1)
+        df = df.drop(['classe'], axis=1)
+        print('N° sample before oversampling: ', df.shape)
+        df_res = oversample_with_gaussian_noise(df,n_samples)
         print('N° sample after oversampling: ', df_res.shape)
-
-        vibration_al = df[df['classe'] == 5]
-        vibration_al['total'] = vibration_al['Ore_lav_totali']
-        vibration_al = vibration_al.drop(['Ore_lav_totali'], axis=1)
-
-        result = pd.concat([vibration_al, df_res])
-        print(result.head(), result.shape)
-        result.to_excel('overS.xlsx')
-
-        return result
+        df_res.to_excel('reduce_dimensionNEW.xlsx')
 
     def reduce_n_range(self):
         feature = self.feature_subset()
@@ -174,13 +168,13 @@ class PredManClass:
         dfN.to_excel('Dataset.xlsx')
 
     def merge_columns(self, df):
-        #df = self.overSample()
+        # df = self.overSample()
 
         dfN = df.drop(['total', 'deltaDateHour', 'classe', 'ore_lav_rim'], axis=1)
-        print(dfN.head())
+        # print(dfN.head())
 
         g1 = dfN.columns[6:11]
-        print(g1)
+        # print(g1)
 
         red = dfN[g1].sum(axis=1)
 
@@ -284,14 +278,93 @@ class PredManClass:
         return dataframe
 
     def get_new_data(self):
-        df = pd.read_csv('./VibrationFootprints_time/3_2020037085.csv')
-        df.rename(columns={'delta_date_hour': 'deltaDateHour', 'tempo_lav': 'total'}, inplace=True)
-        df['classe'] = 3
-        print(df.head())
+        glob_df = None
+        for file in os.listdir('VibrationFootprints_time'):
+            df = pd.read_csv(f'./VibrationFootprints_time/{file}')
+            df.rename(columns={'delta_date_hour': 'deltaDateHour', 'tempo_lav': 'total'}, inplace=True)
+            df.drop(df.tail(1).index, inplace=True)
+            if glob_df is not None:
+                glob_df = pd.concat([glob_df, df])
+            else:
+                glob_df = df
+            #print(glob_df.shape)
 
-        df.iloc[:, 3:-1] = df.iloc[:, 3:-1].apply(lambda x: x / 3600, axis=0)
-        #self.vib_foot.iloc[:, 13:] = self.vib_foot.iloc[:, 13:].apply(lambda x: x / 3600, axis=0)
-        self.merge_columns(df)
+        glob_df.iloc[:, 3:-1] = glob_df.iloc[:, 3:-1].apply(lambda x: x / 3600, axis=0)
+        glob_df['classe'] = 3
+        self.merge_columns(glob_df)
+
+    def weibullDist2_0(self):
+        self.get_new_data()
+        self.overSample(52)
+
+        df = pd.read_excel('reduce_dimensionNEW.xlsx', sheet_name='Sheet1').drop(['Unnamed: 0'], axis=1)
+        X_train, X_test, y_train, y_test = train_test_split(df.drop(['ore_lav_rim'], axis=1),
+                                                            df['ore_lav_rim'],
+                                                            test_size=0.2,
+                                                            random_state=42)
+        X_train['ore_lav_rim'] = y_train
+        weibull_aft = WeibullAFTFitter()
+        weibull_aft.fit(X_train, duration_col='ore_lav_rim')
+        # weibull_aft.print_summary()
+
+        scale = np.exp(weibull_aft.params_['lambda_']['Intercept'])
+        shape = np.exp(weibull_aft.params_['rho_']['Intercept'])
+        print(shape, scale)
+
+        print(weibull_aft.median_survival_time_)
+        print(weibull_aft.mean_survival_time_)
+        # print(weibull_aft.confidence_intervals_)
+
+        predictions = []
+        for i, t in X_test.iterrows():
+            #print(i, t)
+            predict = weibull_aft.predict_expectation(X_test.loc[[i]])
+            predictions.append(predict.item())
+
+        '''sf = weibull_aft.predict_survival_function(X_test)
+        sf.plot()
+        plt.title('Funzione di sopravvivenza stimata')
+        plt.xlabel('Tempo (ore)')
+        plt.ylabel('Probabilità di sopravvivenza')
+        plt.show()'''
+
+        data = {'ore_lav_rimanenti predette': predictions,
+                'ore_lav_rimanenti reali': y_test.tolist()}
+        confronto = pd.DataFrame(data)
+        confronto.to_excel('comparationWeibullDistNEW.xlsx')
+        # print(confronto.head())
+
+    def SVM2_0(self):
+        df = pd.read_excel('reduce_dimensionNEW.xlsx', sheet_name='Sheet1').drop(['Unnamed: 0'], axis=1)
+        target = df['ore_lav_rim']
+        df = df.drop(['ore_lav_rim'], axis=1)
+
+        # normalizzare i dataframe
+        df = (df - df.min()) / (df.max() - df.min())
+        df['ore_lav_rim'] = target
+        X_train, X_test, y_train, y_test = train_test_split(df.drop(['ore_lav_rim'], axis=1),
+                                                            df['ore_lav_rim'],
+                                                            test_size=0.2,
+                                                            random_state=42)
+
+        # modello generale
+        param = {'kernel': ('linear', 'poly', 'rbf', 'sigmoid'), 'C': [1, 5, 10], 'degree': [3, 8],
+                 'coef0': [0.01, 10, 0.5], 'gamma': ('auto', 'scale')}
+
+        model = SVR()
+        svr_cv_modelgen = GridSearchCV(model, param, cv=5, verbose=10)
+        svr_tuned_gen = svr_cv_modelgen.fit(X_train, y_train)
+
+        print(svr_tuned_gen.best_params_)
+        # {'C': 10, 'coef0': 10, 'degree': 3, 'gamma': 'scale', 'kernel': 'poly'}
+
+        y_pred_gen = list(svr_tuned_gen.predict(X_test))
+
+        data = {'ore_lav_rimanenti predette': y_pred_gen,
+                'ore_lav_rimanenti reali': y_test.tolist()}
+        confronto = pd.DataFrame(data)
+        confronto.to_excel('comparationSvmNEW.xlsx')
+
 
     def weibullDistNEW(self):
         # load data
@@ -307,7 +380,7 @@ class PredManClass:
         train, test = df[df['classe'] == 0].drop(['classe'], axis=1), df[df['classe'] == 1].drop(['classe'], axis=1)
 
         x_test, y_test = test.drop(['ore_lav_rim'], axis=1), test['ore_lav_rim']
-        #print(train.head(), test.head())
+        # print(train.head(), test.head())
 
         # FIRST IMPLEMENTATION
         weibull_aft = WeibullAFTFitter()
@@ -325,7 +398,7 @@ class PredManClass:
         predictions = []
         probability = []
         for i, t in x_test.iterrows():
-            print(i, t)
+            # print(i, t)
             predict = weibull_aft.predict_expectation(x_test.iloc[[i]])
             predictions.append(predict.item())
 
@@ -344,10 +417,12 @@ class PredManClass:
         plt.ylabel('Probabilità di sopravvivenza')
         plt.show()'''
 
-        '''data = {'Predizione': predictions, 'Reale': y_test.tolist(), 'Prob. sopravvivenza': probability}
+        app = pd.read_excel('reduce_dimensionNEW.xlsx', sheet_name='Sheet1').drop(['Unnamed: 0'], axis=1)
+        data = {'Predizione ore_lav_rimanenti': predictions,
+                'Ore lavoro svolte': app[app['classe'] == 5]['total'].tolist()}
         confronto = pd.DataFrame(data)
-        # confronto.to_excel('comparationWeibullDist.xlsx')
-        print(confronto.head())'''
+        confronto.to_excel('comparationWeibullDistNEW.xlsx')
+        print(confronto.head())
 
         '''new_data = test.iloc[[x]].drop(['total'], axis=1)
         print(new_data)
@@ -395,7 +470,6 @@ class PredManClass:
         plt.ylabel('Densità di probabilità')
         plt.title('Distribuzione di Weibull')
         plt.show()'''
-
 
     def weibullDist(self):
         # load data
@@ -581,11 +655,13 @@ if __name__ == "__main__":
 
     # predManObj.decisionTree_classifier()
 
-    #predManObj.weibullDist()
+    # predManObj.weibullDist()
 
-    #predManObj.get_new_data()
-    predManObj.weibullDistNEW()
+    # predManObj.get_new_data()
+    # predManObj.weibullDistNEW()
 
+    #predManObj.weibullDist2_0()
+    predManObj.SVM2_0()
 
     # predManObj.SVM()
 
