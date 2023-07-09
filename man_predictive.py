@@ -294,8 +294,8 @@ class PredManClass:
         self.merge_columns(glob_df)
 
     def weibullDist2_0(self):
-        self.get_new_data()
-        self.overSample(52)
+        #self.get_new_data()
+        #self.overSample(52)
 
         df = pd.read_excel('reduce_dimensionNEW.xlsx', sheet_name='Sheet1').drop(['Unnamed: 0'], axis=1)
         X_train, X_test, y_train, y_test = train_test_split(df.drop(['ore_lav_rim'], axis=1),
@@ -365,14 +365,11 @@ class PredManClass:
         confronto = pd.DataFrame(data)
         confronto.to_excel('comparationSvmNEW.xlsx')
 
-
     def weibullDistNEW(self):
         # load data
-        df = pd.read_excel('reduce_dimensionNEW.xlsx', sheet_name='Sheet1').drop(['Unnamed: 0'], axis=1)
+        df = pd.read_excel('reduce_dimensionNEW2.xlsx', sheet_name='Sheet1').drop(['Unnamed: 0'], axis=1)
         target = df['ore_lav_rim']
         df = df.drop(['ore_lav_rim'], axis=1)
-
-        print(df.head())
 
         # normalizzare i dataframe
         df = (df - df.min()) / (df.max() - df.min())
@@ -396,20 +393,11 @@ class PredManClass:
         # print(weibull_aft.confidence_intervals_)
 
         predictions = []
-        probability = []
         for i, t in x_test.iterrows():
             # print(i, t)
             predict = weibull_aft.predict_expectation(x_test.iloc[[i]])
             predictions.append(predict.item())
 
-            '''sf = weibull_aft.predict_survival_function(x_test.iloc[[i]])
-            time_of_work = y_test.iloc[[i]].item()
-            # TODO: il valore assoluto è probabilmente il motivo per cui c'è una prob. non coerente con la previsione
-            time_idx = np.abs(sf.index.to_numpy() - time_of_work).argmin()
-            print(time_idx)
-            prob_sopravvivenza = sf.iloc[time_idx, 0]
-            probability.append(prob_sopravvivenza)'''
-        print(predictions)
         '''sf = weibull_aft.predict_survival_function(test.iloc[[11]])
         sf.plot()
         plt.title('Funzione di sopravvivenza stimata')
@@ -417,59 +405,42 @@ class PredManClass:
         plt.ylabel('Probabilità di sopravvivenza')
         plt.show()'''
 
-        app = pd.read_excel('reduce_dimensionNEW.xlsx', sheet_name='Sheet1').drop(['Unnamed: 0'], axis=1)
+        app = pd.read_excel('reduce_dimensionNEW2.xlsx', sheet_name='Sheet1').drop(['Unnamed: 0'], axis=1)
         data = {'Predizione ore_lav_rimanenti': predictions,
                 'Ore lavoro svolte': app[app['classe'] == 5]['total'].tolist()}
         confronto = pd.DataFrame(data)
-        confronto.to_excel('comparationWeibullDistNEW.xlsx')
-        print(confronto.head())
+        confronto.to_excel('comparationWeibullDistNEW2.xlsx')
 
-        '''new_data = test.iloc[[x]].drop(['total'], axis=1)
-        print(new_data)
+    def SVMNEW(self):
+        df = pd.read_excel('reduce_dimensionNEW2.xlsx', sheet_name='Sheet1').drop(['Unnamed: 0'], axis=1)
+        target = df['ore_lav_rim']
+        df = df.drop(['ore_lav_rim'], axis=1)
 
-        predicted_expectation = weibull_aft.predict_expectation(new_data)
-        print(predicted_expectation)
+        # normalizzare i dataframe
+        df = (df - df.min()) / (df.max() - df.min())
+        df['ore_lav_rim'] = target
+        train, test = df[df['classe'] == 0].drop(['classe'], axis=1), df[df['classe'] == 1].drop(['classe'], axis=1)
+        x_train = train.drop(['ore_lav_rim'], axis=1)
+        y_train = train['ore_lav_rim']
+        x_test = test.drop(['ore_lav_rim'], axis=1)
 
-        # prendo la baseline, quindi un comportamento medio
-        n = df.mean()
-        #n['Ore_lav_totali'] = 1000
-        sf = weibull_aft.predict_survival_function(new_data)
-        sf.plot()
-        plt.title('Funzione di sopravvivenza stimata')
-        plt.xlabel('Tempo (ore)')
-        plt.ylabel('Probabilità di sopravvivenza')
-        plt.show()
+        # modello generale
+        param = {'C': [10], 'coef0': [10], 'degree': [3], 'gamma': ['scale'], 'kernel': ['poly']}
 
-        hz = weibull_aft.predict_hazard(new_data)
-        hz.plot()
-        plt.title('Funzione di rischio stimata')
-        plt.xlabel('Tempo (ore)')
-        plt.ylabel('Funzione di hazard')
-        plt.show()'''
+        model = SVR()
+        svr_cv_modelgen = GridSearchCV(model, param, cv=5)
+        svr_tuned_gen = svr_cv_modelgen.fit(x_train, y_train)
 
-        # SECOND IMPLEMENTATION
-        '''wf = WeibullFitter()
-        wf.fit(train['total'])
-        scale = wf.lambda_
-        shape = wf.rho_
-        print(shape, scale)
-        wf.survival_function_.plot()
-        plt.show()'''
+        print(svr_tuned_gen.best_params_)
+        # {'C': 10, 'coef0': 10, 'degree': 3, 'gamma': 'scale', 'kernel': 'poly'}
 
-        # THIRD IMPLEMENTATION
-        '''shape, _, scale = weibull_min.fit(df['total'], floc=0)
-        print(shape, scale)'''
+        y_pred_gen = list(svr_tuned_gen.predict(x_test))
 
-        # Calcola la distribuzione di Weibull con i parametri shape, loc e scale
-        '''x = np.linspace(0, 200, 200)
-        pdf = weibull_min.pdf(x, shape, scale=scale)
-
-        # Grafica la distribuzione di Weibull
-        plt.plot(x, pdf)
-        plt.xlabel('Tempo di vita (ore)')
-        plt.ylabel('Densità di probabilità')
-        plt.title('Distribuzione di Weibull')
-        plt.show()'''
+        app = pd.read_excel('reduce_dimensionNEW2.xlsx', sheet_name='Sheet1').drop(['Unnamed: 0'], axis=1)
+        data = {'ore_lav_rimanenti predette': y_pred_gen,
+                'ore_lav_rimanenti reali': app[app['classe'] == 5]['total'].tolist()}
+        confronto = pd.DataFrame(data)
+        confronto.to_excel('comparationSvmNEW2.xlsx')
 
     def weibullDist(self):
         # load data
@@ -659,9 +630,10 @@ if __name__ == "__main__":
 
     # predManObj.get_new_data()
     # predManObj.weibullDistNEW()
+    predManObj.SVMNEW()
 
-    #predManObj.weibullDist2_0()
-    predManObj.SVM2_0()
+    # predManObj.weibullDist2_0()
+    # predManObj.SVM2_0()
 
     # predManObj.SVM()
 
