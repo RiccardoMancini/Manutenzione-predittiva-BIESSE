@@ -50,29 +50,16 @@ class PredManClass:
                                             'Ore lav manc', 'Perc ore manc'], axis=1)
 
     def some_stats(self):
-        df = pd.read_excel('Dataset.xlsx', sheet_name='Sheet1').drop(['Unnamed: 0'], axis=1)
-        train, test = df[df['classe'] == 3].drop(['classe'], axis=1), df[df['classe'] == 5].drop(['classe'], axis=1)
+        df = pd.read_excel('reduce_dimension.xlsx', sheet_name='Sheet1')
+        #train, test = df[df['classe'] == 3].drop(['classe'], axis=1), df[df['classe'] == 5].drop(['classe'], axis=1)
 
         col = 'total'
         # Istogramma
-        sns.histplot(data=train, x=col, bins=50, kde=True, alpha=0.5)
+        sns.histplot(data=df, x=col, bins=50, kde=True, alpha=0.5)
         plt.xlabel('Valori')
         plt.ylabel('Frequenza')
         plt.title('Istogramma dei dati')
         plt.show()
-
-        # Some visualization...
-        kmf = KaplanMeierFitter()
-        kmf.fit(durations=train[col])
-        kmf.plot_survival_function()
-        plt.show()
-        kmf.plot_cumulative_density()
-        plt.show()
-
-        median_ = kmf.median_survival_time_
-        median_confidence_interval_ = median_survival_times(kmf.confidence_interval_)
-        print(median_)
-        print(median_confidence_interval_)
 
     def feature_subset(self):
         df_filt = self.vib_foot[self.vib_foot['classe'] == 3]
@@ -288,7 +275,7 @@ class PredManClass:
         print('WeibullDist')
         print(f'MSE: {round(avg_mse, 2)}; RMSE: {round(avg_rmse, 2)}; MAE: {round(avg_mae, 2)}; SSE: {round(sse, 2)};')
 
-    def SVMLeaveOneOut(self):
+    def svmLeaveOneOut(self):
         target_col = 'ore_lav_rim'
         df = pd.read_excel('reduce_dimensionNEW.xlsx', sheet_name='Sheet1').drop(['Unnamed: 0'], axis=1)
         target = df['ore_lav_rim']
@@ -676,7 +663,7 @@ if __name__ == "__main__":
     # predManObj.SVM2_0()
 
     predManObj.weibullLeaveOneOut()
-    predManObj.SVMLeaveOneOut()
+    predManObj.svmLeaveOneOut()
 
     # predManObj.weibullDist()
     # predManObj.SVM()
