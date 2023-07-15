@@ -1,5 +1,5 @@
 import os
-
+from tqdm import tqdm
 import numpy as np
 import pandas as pd
 import openpyxl
@@ -8,6 +8,7 @@ import matplotlib.pyplot as plt
 import matplotlib.colors as mcolors
 from scipy import stats
 from sklearn import tree
+from sklearn.metrics import mean_squared_error, mean_absolute_error
 from sklearn.model_selection import train_test_split, cross_val_score, cross_val_predict, ShuffleSplit, GridSearchCV
 from sklearn import metrics
 from sklearn.utils import resample
@@ -215,54 +216,6 @@ class PredManClass:
         print(result.head(), result.shape)
         return result
 
-    def decisionTree_classifier(self):
-        # rimuoviamo temporaneamente il campione della classe con un solo campione
-        single_sample_class = None
-        for c in self.vib_foot['classe'].unique():
-            # print(c)
-            if self.vib_foot[self.vib_foot['classe'] == c].shape[0] == 1:
-                single_sample_class = self.vib_foot.loc[self.vib_foot['classe'] == c]
-                # print(self.vib_foot.loc[self.vib_foot['classe'] == c])
-                self.vib_foot = self.vib_foot.loc[self.vib_foot['classe'] != c]
-
-        # print(self.vib_foot.shape[0])
-
-        # Oversampling delle classi 3 e 4 e undersampling della classe 5
-        df_2 = resample(self.vib_foot[self.vib_foot['classe'] == 3], replace=True, n_samples=19, random_state=42)
-        df_1 = resample(self.vib_foot[self.vib_foot['classe'] == 4], replace=True, n_samples=19, random_state=42)
-        df_3 = self.vib_foot[self.vib_foot['classe'] == 5].sample(19)
-
-        # Combinare i dataframes oversampled con il dataframe originale
-        df_balanced = pd.concat([df_3, df_2, df_1])
-
-        # Verificare che le classi siano bilanciate
-        print(df_balanced['classe'].value_counts())
-        self.vib_foot = df_balanced.drop(['snMacchina', 'snEm'], axis=1)
-        # Split the data into training and testing set        
-        X_train, X_test, y_train, y_test = train_test_split(self.vib_foot.drop(['classe'], axis=1),
-                                                            self.vib_foot['classe'],
-                                                            stratify=self.vib_foot['classe'],
-                                                            test_size=0.2,
-                                                            random_state=42)
-
-        # choose from different tunable hyperparameters
-        clf = tree.DecisionTreeClassifier(max_depth=3, criterion='entropy')
-
-        # Creating the model on Training Data
-        dTree = clf.fit(X_train, y_train)
-        prediction = dTree.predict(X_test)
-
-        # Measuring accuracy on Testing Data
-        print(metrics.classification_report(y_test, prediction))
-        print(metrics.confusion_matrix(y_test, prediction))
-        '''metrics.ConfusionMatrixDisplay(metrics.confusion_matrix(y_test, prediction)).plot()
-        plt.show()'''
-
-        # Plotting the feature importance for Top 10 most important columns
-        feature_importances = pd.Series(dTree.feature_importances_, index=X_train.columns)
-        feature_importances.nlargest(10).plot(kind='barh', fontsize=6)
-        plt.show()
-
     def discretize_columns(self, dataframe, columns, bin_width=24):
         # Calcola il minimo e il massimo globali tra le colonne specificate
         global_min = dataframe[columns].min().min()
@@ -292,6 +245,97 @@ class PredManClass:
         glob_df.iloc[:, 3:-1] = glob_df.iloc[:, 3:-1].apply(lambda x: x / 3600, axis=0)
         glob_df['classe'] = 3
         self.merge_columns(glob_df)
+
+    def weibullLeaveOneOut(self):
+        target_col = 'ore_lav_rim'
+        df = pd.read_excel('reduce_dimensionNEW.xlsx', sheet_name='Sheet1').drop(['Unnamed: 0'], axis=1)
+        X = df
+        y = df[target_col]
+        n_samples = df.shape[0]
+        mse_errors = []
+        rmse_errors = []
+        mae_errors = []
+        sse_errors = []
+
+        for i in tqdm(range(n_samples)):
+            X_train = X.drop([i])
+            X_test = X.loc[[i]].drop([target_col], axis=1)
+            y_test = y.loc[[i]]
+            '''print(X_train.head())
+            print(X_test.head())
+            print(y_test.head())'''
+
+            weibull_aft = WeibullAFTFitter()
+            weibull_aft.fit(X_train, duration_col='ore_lav_rim')
+            y_pred = weibull_aft.predict_expectation(X_test)
+            #print(y_pred)
+
+            mse = (y_test - y_pred)**2
+            rmse = np.sqrt(mse)
+            mae = abs(y_test - y_pred)
+            sse_sing = (y_test - y_pred)**2
+
+            #print(mse, rmse, mae, sse_sing)
+            mse_errors.append(mse)
+            mae_errors.append(mae)
+            sse_errors.append(sse_sing)
+
+
+        avg_mse = np.mean(mse_errors)
+        avg_rmse = np.sqrt(avg_mse)
+        avg_mae = np.mean(mae_errors)
+        sse = np.sum(sse_errors)
+        print('WeibullDist')
+        print(f'MSE: {round(avg_mse, 2)}; RMSE: {round(avg_rmse, 2)}; MAE: {round(avg_mae, 2)}; SSE: {round(sse, 2)};')
+
+    def SVMLeaveOneOut(self):
+        target_col = 'ore_lav_rim'
+        df = pd.read_excel('reduce_dimensionNEW.xlsx', sheet_name='Sheet1').drop(['Unnamed: 0'], axis=1)
+        target = df['ore_lav_rim']
+        df = df.drop(['ore_lav_rim'], axis=1)
+
+        # normalizzare i dataframe
+        df = (df - df.min()) / (df.max() - df.min())
+        df['ore_lav_rim'] = target
+
+        X = df
+        y = df[target_col]
+        n_samples = df.shape[0]
+        mse_errors = []
+        mae_errors = []
+        sse_errors = []
+
+        for i in tqdm(range(n_samples)):
+            X_train = X.drop([i]).drop([target_col], axis=1)
+            y_train = y.drop([i])
+            X_test = X.loc[[i]].drop([target_col], axis=1)
+            y_test = y.loc[[i]]
+            '''print(X_train.head())
+            print(y_train.head())
+            print(X_test.head())
+            print(y_test.head())'''
+
+            model = SVR(C=10, coef0=10, degree=3, gamma='scale', kernel='poly')
+            model.fit(X_train, y_train)
+            y_pred = model.predict(X_test)
+            #print(y_pred)
+
+            mse = (y_test - y_pred)**2
+            mae = abs(y_test - y_pred)
+            sse_sing = (y_test - y_pred)**2
+
+            #print(mse, rmse, mae, sse_sing)
+            mse_errors.append(mse)
+            mae_errors.append(mae)
+            sse_errors.append(sse_sing)
+
+
+        avg_mse = np.mean(mse_errors)
+        avg_rmse = np.sqrt(avg_mse)
+        avg_mae = np.mean(mae_errors)
+        sse = np.sum(sse_errors)
+        print('SVR')
+        print(f'MSE: {round(avg_mse, 2)}; RMSE: {round(avg_rmse, 2)}; MAE: {round(avg_mae, 2)}; SSE: {round(sse, 2)};')
 
     def weibullDist2_0(self):
         #self.get_new_data()
@@ -624,17 +668,17 @@ if __name__ == "__main__":
 
     # predManObj.component_correlation()
 
-    # predManObj.decisionTree_classifier()
-
-    # predManObj.weibullDist()
-
     # predManObj.get_new_data()
     # predManObj.weibullDistNEW()
-    predManObj.SVMNEW()
+    # predManObj.SVMNEW()
 
     # predManObj.weibullDist2_0()
     # predManObj.SVM2_0()
 
+    predManObj.weibullLeaveOneOut()
+    predManObj.SVMLeaveOneOut()
+
+    # predManObj.weibullDist()
     # predManObj.SVM()
 
     # predManObj.reduce_n_range()
