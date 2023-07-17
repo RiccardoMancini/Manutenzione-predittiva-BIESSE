@@ -1,3 +1,7 @@
 #!/bin/sh
-source /Users/riccardo/anaconda3/bin/activate bdaml
+
+ENVDIR=/Users/riccardo/anaconda3/bin/activate
+ENVNAME=bdaml
+
+source $ENVDIR $ENVNAME
 python ./man_predictive.py
