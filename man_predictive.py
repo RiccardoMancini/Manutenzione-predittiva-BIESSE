@@ -442,7 +442,7 @@ class PredManClass:
 
         print(dfT.head())
 
-        bin_widths = [12, 24, 48]
+        bin_widths = [24]
         for bin in bin_widths:
             app = dfT.iloc[:, :7]
 
@@ -574,30 +574,30 @@ class PredManClass:
         confronto = pd.DataFrame(data)
         confronto.to_excel('comparationSvmNEW.xlsx')
 
-
-    def svm_fitted(self):
+    def svm_fittedD2(self):
         df = pd.read_excel('Dataset2.xlsx', sheet_name='Sheet1').drop(['Unnamed: 0'], axis=1)
         target = df['ore_lav_rim']
-        #df = df.drop(['ore_lav_rim'], axis=1)
+        df = df.drop(['ore_lav_rim'], axis=1)
 
         # normalizzare i dataframe
         df = (df - df.min()) / (df.max() - df.min())
         df['ore_lav_rim'] = target
-
-        X_train, X_test, y_train, y_test = train_test_split(df.drop(['ore_lav_rim'], axis=1),
+        '''X_train, X_test, y_train, y_test = train_test_split(df.drop(['ore_lav_rim'], axis=1),
                                                             df['ore_lav_rim'],
                                                             test_size=0.2,
-                                                            random_state=42)
+                                                            random_state=42)'''
+        X_train = df.drop(['ore_lav_rim'], axis=1)
+        y_train = df['ore_lav_rim']
 
         # Seleziona le due feature del dataset per l'asse x e l'asse y
-        x_feature = X_train['[0.0-0.5)']  # Assumendo che la prima feature sia la colonna 0
-        y_feature = X_train['[0.5-1.5)']  # Assumendo che la seconda feature sia la colonna 1
+        x_feature = X_train['[0.5-1.5)']  # Assumendo che la prima feature sia la colonna 0
+        y_feature = X_train['[2.5-3.5)']  # Assumendo che la seconda feature sia la colonna 1
 
         # Definire il modello SVR con i parametri desiderati
         model = SVR(C=10, coef0=10, degree=3, gamma='scale', kernel='poly')
 
         # Fit del modello sui dati di train
-        model.fit(X_train.iloc[:, 0:2], y_train)
+        model.fit(X_train[['[0.5-1.5)', '[2.5-3.5)']], y_train)
 
         # Creare una griglia di punti per il grafico bidimensionale
         x_min, x_max = x_feature.min(), x_feature.max()
@@ -640,11 +640,85 @@ class PredManClass:
         plt.scatter(x_feature, y_train, c='red', label='Dati di train', marker='o')
         plt.xlabel('x')
         plt.ylabel('y(x)')
-        plt.legend()
         plt.grid(True)
         plt.show()
 
+    def svm_fittedD1(self):
+        df = pd.read_excel('./comparisons/discr_SVM_dataset1/discr24.xlsx', sheet_name='Sheet1').drop(['Unnamed: 0'], axis=1)
+        target = df['total']
+        df = df.drop(['total'], axis=1)
 
+        # normalizzare i dataframe
+        df = (df - df.min()) / (df.max() - df.min())
+        df['total'] = target
+        df = df[df['classe'] == 0]
+        print(df.shape)
+
+        '''param = {'kernel': ('linear', 'poly', 'rbf', 'sigmoid'), 'C': [1, 5, 10], 'degree': [3, 5, 8],
+                 'coef0': [0.01, 10, 0.5], 'gamma': ('auto', 'scale')}
+
+        model = SVR()
+        svr_cv_modelgen = GridSearchCV(model, param, cv=5, verbose=10)
+        svr_tuned_gen = svr_cv_modelgen.fit(X_train, y_train)
+
+        print(svr_tuned_gen.best_params_)'''
+
+        X_train = df.drop(['total'], axis=1)
+        y_train = df['total']
+        
+        # Seleziona le due feature del dataset per l'asse x e l'asse y
+        x_feature = X_train['[0.5-1.5)']  # Assumendo che la prima feature sia la colonna 0
+        y_feature = X_train['[2.5-3.5)']  # Assumendo che la seconda feature sia la colonna 1
+
+        # Definire il modello SVR con i parametri desiderati
+        model = SVR(C=10, coef0=10, degree=5, gamma='scale', kernel='poly')
+
+        # Fit del modello sui dati di train
+        model.fit(X_train[['[0.5-1.5)', '[2.5-3.5)']], y_train)
+
+        # Creare una griglia di punti per il grafico bidimensionale
+        x_min, x_max = x_feature.min(), x_feature.max()
+        y_min, y_max = y_feature.min(), y_feature.max()
+        x_smooth, y_smooth = np.meshgrid(np.linspace(x_min, x_max, 100), np.linspace(y_min, y_max, 100))
+
+        # Effettuare le predizioni del modello sulla griglia di punti
+        xy_points = np.array([x_smooth.ravel(), y_smooth.ravel()]).T
+        z_smooth = model.predict(xy_points).reshape(x_smooth.shape)
+
+        # Plot della curva rappresentata dal modello SVR e dei dati di train
+        fig = plt.figure()
+        ax = fig.add_subplot(111, projection='3d')
+        ax.plot_surface(x_smooth, y_smooth, z_smooth, alpha=0.8)
+        ax.scatter(x_feature, y_feature, y_train, c='red', marker='o', label='Dati di train')
+        ax.set_xlabel('x1')
+        ax.set_ylabel('x2')
+        ax.set_zlabel('y(x)')
+        plt.show()
+
+
+        # Seleziona la feature del dataset per l'asse x
+        x_feature = X_train.iloc[:, 1]  # Assumendo che tu voglia utilizzare la prima feature come asse x
+
+        # Convertire x_feature in un array bidimensionale
+        x_feature = x_feature.values.reshape(-1, 1)
+
+        # Definire il modello SVR con i parametri desiderati
+        model = SVR(C=10, coef0=10, degree=5, gamma='scale', kernel='poly')
+
+        # Fit del modello sui dati di train
+        model.fit(x_feature, y_train)
+
+        # Creare un array di punti più lisci per il grafico utilizzando l'interpolazione
+        x_smooth = np.linspace(x_feature.min(), x_feature.max(), 100).reshape(-1, 1)
+        y_smooth = model.predict(x_smooth)
+
+        # Plot della curva rappresentata dal modello SVR e dei dati di train
+        plt.plot(x_smooth, y_smooth, 'b-', label='Curva SVR')
+        plt.scatter(x_feature, y_train, c='red', label='Dati di train', marker='o')
+        plt.xlabel('x')
+        plt.ylabel('y(x)')
+        plt.grid(True)
+        plt.show()
 
 
 if __name__ == "__main__":
@@ -652,7 +726,7 @@ if __name__ == "__main__":
 
     # Dataset 1
     # predManObj.weibullDist()
-    # predManObj.SVM()
+    #predManObj.SVM()
 
     # Dataset 2
     # predManObj.weibullDist2_0()
@@ -663,4 +737,5 @@ if __name__ == "__main__":
     # predManObj.svmLeaveOneOut()
 
     # predManObj.plot_synt_data()
-    predManObj.svm_fitted()
+    predManObj.svm_fittedD1()
+    predManObj.svm_fittedD2()
