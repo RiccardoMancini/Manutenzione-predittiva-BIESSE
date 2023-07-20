@@ -338,7 +338,6 @@ class PredManClass:
         target = df['total']
         df = df.drop(['total'], axis=1)
 
-        print(df.head())
 
         # normalizzare i dataframe
         df = (df - df.min()) / (df.max() - df.min())
@@ -354,13 +353,36 @@ class PredManClass:
 
         scale = np.exp(weibull_aft.params_['lambda_']['Intercept'])
         shape = np.exp(weibull_aft.params_['rho_']['Intercept'])
-        print(shape, scale)
+        print("Forma: ", shape)
+        print("Scala: ", scale)
 
         print(weibull_aft.median_survival_time_)
         print(weibull_aft.mean_survival_time_)
-        # print(weibull_aft.confidence_intervals_)
 
-        predictions = []
+
+        '''sf = weibull_aft.predict_survival_function(test.iloc[[16]])
+        # Punto selezionato
+        x_selected = test.iloc[[16]]['total'] + 10  # Sostituisci '16' con l'indice del punto selezionato
+        y_selected = 0.246406749530659  # Sostituisci con il valore y del punto selezionato
+
+        # Calcola le proiezioni sulle assi x e y
+        x_projection = x_selected.values[0]  # Valore x del punto selezionato
+        y_projection = y_selected
+
+        plt.scatter(x_selected, y_selected, color='red', s=50,
+                    zorder=5)  # Imposta la dimensione 's' e 'zorder' per evidenziare il punto
+
+        plt.plot(sf)
+        plt.plot([x_projection, x_projection], [0, y_projection], color='gray',
+                 linestyle='dotted')  # Linea di proiezione su asse x
+        plt.plot([0, x_projection], [y_projection, y_projection], color='gray',
+                 linestyle='dotted')  # Linea di proiezione su asse y
+        plt.title('Funzione di sopravvivenza stimata')
+        plt.xlabel('Ore di lavoro')
+        plt.ylabel('Probabilità di sopravvivenza')
+        plt.show()'''
+
+        '''predictions = []
         probability = []
         for i, t in x_test.iterrows():
             print(i, t)
@@ -373,19 +395,14 @@ class PredManClass:
             time_idx = np.abs(sf.index.to_numpy() - time_of_work).argmin()
             print(time_idx)
             prob_sopravvivenza = sf.iloc[time_idx, 0]
-            probability.append(prob_sopravvivenza)
+            probability.append(prob_sopravvivenza)'''
 
-        '''sf = weibull_aft.predict_survival_function(test.iloc[[11]])
-        sf.plot()
-        plt.title('Funzione di sopravvivenza stimata')
-        plt.xlabel('Tempo (ore)')
-        plt.ylabel('Probabilità di sopravvivenza')
-        plt.show()'''
 
-        data = {'Predizione': predictions, 'Reale': y_test.tolist(), 'Prob. sopravvivenza': probability}
+
+        '''data = {'Predizione': predictions, 'Reale': y_test.tolist(), 'Prob. sopravvivenza': probability}
         confronto = pd.DataFrame(data)
         # confronto.to_excel('comparationWeibullDist.xlsx')
-        print(confronto.head())
+        print(confronto.head())'''
 
         '''new_data = test.iloc[[x]].drop(['total'], axis=1)
         print(new_data)
@@ -424,15 +441,15 @@ class PredManClass:
         print(shape, scale)'''
 
         # Calcola la distribuzione di Weibull con i parametri shape, loc e scale
-        '''x = np.linspace(0, 200, 200)
+        x = np.linspace(0, 120, 1000)
         pdf = weibull_min.pdf(x, shape, scale=scale)
 
         # Grafica la distribuzione di Weibull
         plt.plot(x, pdf)
-        plt.xlabel('Tempo di vita (ore)')
-        plt.ylabel('Densità di probabilità')
+        plt.xlabel('Ore di lavoro')
+        plt.ylabel('p(x)')
         plt.title('Distribuzione di Weibull')
-        plt.show()'''
+        plt.show()
 
     def SVM(self):
         # load data
@@ -512,35 +529,47 @@ class PredManClass:
                                                             random_state=42)
         X_train['ore_lav_rim'] = y_train
         weibull_aft = WeibullAFTFitter()
-        weibull_aft.fit(X_train, duration_col='ore_lav_rim')
+        weibull_aft.fit(df, duration_col='ore_lav_rim')
         # weibull_aft.print_summary()
 
         scale = np.exp(weibull_aft.params_['lambda_']['Intercept'])
         shape = np.exp(weibull_aft.params_['rho_']['Intercept'])
-        print(shape, scale)
+        print("Forma: ", shape)
+        print("Scala: ", scale)
 
         print(weibull_aft.median_survival_time_)
         print(weibull_aft.mean_survival_time_)
         # print(weibull_aft.confidence_intervals_)
 
-        predictions = []
+        '''predictions = []
         for i, t in X_test.iterrows():
             # print(i, t)
             predict = weibull_aft.predict_expectation(X_test.loc[[i]])
             predictions.append(predict.item())
 
-        '''sf = weibull_aft.predict_survival_function(X_test)
+        sf = weibull_aft.predict_survival_function(X_test)
         sf.plot()
         plt.title('Funzione di sopravvivenza stimata')
         plt.xlabel('Tempo (ore)')
         plt.ylabel('Probabilità di sopravvivenza')
-        plt.show()'''
+        plt.show()
 
         data = {'ore_lav_rimanenti predette': predictions,
                 'ore_lav_rimanenti reali': y_test.tolist()}
         confronto = pd.DataFrame(data)
         confronto.to_excel('comparationWeibullDistNEW.xlsx')
-        # print(confronto.head())
+        # print(confronto.head())'''
+
+        # Calcola la distribuzione di Weibull con i parametri shape, loc e scale
+        x = np.linspace(0, 3000, 200)
+        pdf = weibull_min.pdf(x, shape, scale=scale)
+
+        # Grafica la distribuzione di Weibull
+        plt.plot(x, pdf)
+        plt.xlabel('Ore di lavoro rimanenti')
+        plt.ylabel('p(x)')
+        plt.title('Distribuzione di Weibull')
+        plt.show()
 
     @staticmethod
     def SVM2_0():
@@ -652,7 +681,6 @@ class PredManClass:
         df = (df - df.min()) / (df.max() - df.min())
         df['total'] = target
         df = df[df['classe'] == 0]
-        print(df.shape)
 
         '''param = {'kernel': ('linear', 'poly', 'rbf', 'sigmoid'), 'C': [1, 5, 10], 'degree': [3, 5, 8],
                  'coef0': [0.01, 10, 0.5], 'gamma': ('auto', 'scale')}
@@ -725,11 +753,11 @@ if __name__ == "__main__":
     predManObj = PredManClass()
 
     # Dataset 1
-    # predManObj.weibullDist()
-    #predManObj.SVM()
+    predManObj.weibullDist()
+    # predManObj.SVM()
 
     # Dataset 2
-    # predManObj.weibullDist2_0()
+    predManObj.weibullDist2_0()
     # predManObj.SVM2_0()
 
     # Metriche di valutazione su Dataset 2
