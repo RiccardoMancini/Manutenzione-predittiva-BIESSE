@@ -765,5 +765,5 @@ if __name__ == "__main__":
     # predManObj.svmLeaveOneOut()
 
     # predManObj.plot_synt_data()
-    predManObj.svm_fittedD1()
-    predManObj.svm_fittedD2()
+    # predManObj.svm_fittedD1()
+    # predManObj.svm_fittedD2()
