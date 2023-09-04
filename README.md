@@ -1,4 +1,4 @@
-# Manutenzione-predittiva su dati BIESSE
+# Manutenzione-predittiva su dati BIESSE (Big Data Analytics & Machine Learning project)
 ## Abstract
 Nel contesto industriale, la durata e l’affidabilità dei componenti sono elementi
 critici che influenzano direttamente l’efficienza e la produttività dei processi di
@@ -24,3 +24,5 @@ elettromandrini. Una migliore comprensione dei modelli più appropriati per stim
 il tempo di vita rimanente dei componenti può tradursi in un notevole risparmio di
 tempo, denaro e risorse, migliorando l’efficienza e la produttività complessiva delle
 operazioni industriali.
+&nbsp;&nbsp;
+[Read more here](./Relazione-progetto.pdf)
